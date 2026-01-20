@@ -1,0 +1,46 @@
+---
+- name: Install nginx and apache2-utils
+  apt:
+    name:
+      - nginx
+      - apache2-utils
+    state: present
+
+- name: Create htpasswd file
+  command: htpasswd -bc /etc/nginx/.htpasswd {{ htpasswd_user }} {{ htpasswd_password }}
+  args:
+    creates: /etc/nginx/.htpasswd
+
+- name: Generate self-signed SSL certificate
+  command: >
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048
+    -keyout /etc/ssl/private/workshop.key
+    -out /etc/ssl/certs/workshop.crt
+    -subj "/CN={{ workshop_domain }}"
+  args:
+    creates: /etc/ssl/certs/workshop.crt
+
+- name: Deploy nginx configuration
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/sites-available/workshop
+    mode: '0644'
+  notify: Restart nginx
+
+- name: Enable site
+  file:
+    src: /etc/nginx/sites-available/workshop
+    dest: /etc/nginx/sites-enabled/workshop
+    state: link
+  notify: Restart nginx
+
+- name: Remove default site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Restart nginx
+
+- name: Enable nginx
+  systemd:
+    name: nginx
+    enabled: yes

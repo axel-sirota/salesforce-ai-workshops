@@ -1,0 +1,19 @@
+---
+- name: Create Jaeger data directory
+  file:
+    path: /opt/jaeger
+    state: directory
+    mode: '0755'
+
+- name: Run Jaeger container
+  docker_container:
+    name: jaeger
+    image: jaegertracing/all-in-one:latest
+    state: started
+    restart_policy: unless-stopped
+    ports:
+      - "16686:16686"  # UI (internal, nginx proxies)
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    env:
+      COLLECTOR_OTLP_ENABLED: "true"
