@@ -1,0 +1,50 @@
+[
+    {
+        "id": "doc-payments-auth",
+        "title": "Payments API Authentication",
+        "category": "api",
+        "content": "To authenticate with the Payments API, use OAuth 2.0 client credentials flow. First, obtain your client_id and client_secret from the Developer Portal. Make a POST request to /oauth/token with grant_type=client_credentials. The response contains an access_token valid for 1 hour. Include this token in the Authorization header as 'Bearer {token}' for all subsequent requests. Rate limits: 100 requests/minute for authenticated users."
+    },
+    {
+        "id": "doc-auth-sdk",
+        "title": "Auth SDK Quick Start",
+        "category": "sdk",
+        "content": "Install the Auth SDK with 'pip install company-auth-sdk'. Initialize with AuthClient(client_id, client_secret). Call client.authenticate() to get a session. The SDK handles token refresh automatically. For service-to-service auth, use ServiceAuth class instead. Common errors: 401 means invalid credentials, 429 means rate limited. See examples at github.com/company/auth-sdk-examples."
+    },
+    {
+        "id": "doc-billing-service",
+        "title": "Billing Service Overview",
+        "category": "service",
+        "content": "The Billing Service handles subscription management, invoicing, and payment processing. REST APIs: POST /v1/subscriptions (create), GET /v1/subscriptions/{id} (read), POST /v1/invoices (generate), POST /v1/refunds (process refund). Webhook events: subscription.created, invoice.paid, refund.processed. Configure webhooks in the Billing Dashboard. For access requests, contact the Billing team via #billing-support."
+    },
+    {
+        "id": "doc-vector-search",
+        "title": "Vector Search Best Practices",
+        "category": "guide",
+        "content": "When using our Vector Search service: 1) Use embedding dimension 1536 for OpenAI compatibility. 2) Batch inserts for bulk data (max 100 vectors/call). 3) Set top_k between 3-5 for most use cases. 4) Monitor similarity scores - below 0.7 indicates poor matches. 5) Index maintenance runs nightly at 2 AM UTC. For large datasets, contact the Data Platform team about dedicated capacity."
+    },
+    {
+        "id": "doc-staging-env",
+        "title": "Staging Environment Guide",
+        "category": "environment",
+        "content": "Staging environment mirrors production at staging.internal.company.com. Access requires VPN connection. Data is refreshed weekly from anonymized production data. Rate limits are 10x lower than production. Known limitations: Payments API uses sandbox mode only, external integrations are mocked. For staging access issues, contact Platform team via #platform-help. Emergency access: page platform-oncall."
+    },
+    {
+        "id": "doc-error-handling",
+        "title": "Error Handling Standards",
+        "category": "standards",
+        "content": "All APIs must return standard error format: {error: {code: string, message: string, details: object, correlation_id: string}}. HTTP status codes: 400 bad input, 401 auth failure, 403 forbidden, 404 not found, 429 rate limited, 500 server error, 503 service unavailable. Always include correlation_id for debugging. Log errors with structured logging. Retry strategy: exponential backoff with jitter, max 3 retries."
+    },
+    {
+        "id": "doc-rate-limiting",
+        "title": "Rate Limiting Configuration",
+        "category": "api",
+        "content": "Default rate limits: 100 requests/minute authenticated, 10 requests/minute unauthenticated. Response headers: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset. When rate limited (429), check Retry-After header. For higher limits, submit request to API Gateway team with business justification. Enterprise tier gets 1000 requests/minute. Implement client-side: token bucket algorithm recommended."
+    },
+    {
+        "id": "doc-db-connection-pool",
+        "title": "Database Connection Pooling",
+        "category": "guide",
+        "content": "Use connection pooling for all database access. Recommended: min_pool_size=5, max_pool_size=20, connection_timeout=30s, idle_timeout=300s. High-traffic services: increase max to 50. Monitor with db.pool.active and db.pool.waiting metrics. If seeing 'connection pool exhausted' errors: 1) Check for connection leaks (connections not returned), 2) Increase pool size, 3) Add connection timeout. Use context managers to ensure connections are returned."
+    }
+]

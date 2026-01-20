@@ -1,0 +1,75 @@
+{
+    "teams": [
+        {
+            "id": "team-payments",
+            "name": "Payments Team",
+            "description": "Payment processing, subscriptions, billing, refunds",
+            "slack_channel": "#payments-support"
+        },
+        {
+            "id": "team-platform",
+            "name": "Platform Team",
+            "description": "Infrastructure, DevOps, environments, API gateway",
+            "slack_channel": "#platform-help"
+        },
+        {
+            "id": "team-auth",
+            "name": "Auth Team",
+            "description": "Authentication, authorization, identity, SSO",
+            "slack_channel": "#auth-support"
+        },
+        {
+            "id": "team-data",
+            "name": "Data Platform Team",
+            "description": "Data infrastructure, vector search, ML platform, embeddings",
+            "slack_channel": "#data-platform"
+        }
+    ],
+    "owners": [
+        {
+            "id": "owner-sarah",
+            "name": "Sarah Chen",
+            "email": "sarah.chen@company.com",
+            "slack_handle": "@sarah.chen",
+            "team_id": "team-payments",
+            "services": ["payments-api", "billing-service", "billing", "subscriptions", "refunds", "invoices"],
+            "is_active": true
+        },
+        {
+            "id": "owner-james",
+            "name": "James Wilson",
+            "email": "james.wilson@company.com",
+            "slack_handle": "@james.wilson",
+            "team_id": "team-platform",
+            "services": ["staging", "production", "api-gateway", "rate-limiting", "environments"],
+            "is_active": true
+        },
+        {
+            "id": "owner-maria",
+            "name": "Maria Garcia",
+            "email": "maria.garcia@company.com",
+            "slack_handle": "@maria.garcia",
+            "team_id": "team-auth",
+            "services": ["auth-sdk", "oauth", "authentication", "sso", "identity"],
+            "is_active": true
+        },
+        {
+            "id": "owner-david",
+            "name": "David Kim",
+            "email": "david.kim@company.com",
+            "slack_handle": "@david.kim",
+            "team_id": "team-data",
+            "services": ["vector-search", "embeddings", "ml-platform"],
+            "is_active": false
+        },
+        {
+            "id": "owner-emily",
+            "name": "Emily Johnson",
+            "email": "emily.johnson@company.com",
+            "slack_handle": "@emily.johnson",
+            "team_id": "team-data",
+            "services": ["vector-search", "embeddings", "data-pipeline", "ml-platform"],
+            "is_active": true
+        }
+    ]
+}

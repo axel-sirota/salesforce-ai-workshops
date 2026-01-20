@@ -1,0 +1,39 @@
+{
+    "services": [
+        {
+            "name": "payments-api",
+            "status": "healthy",
+            "uptime_percent": 99.95,
+            "last_incident": "2024-01-10T14:30:00Z",
+            "incident_description": "Brief latency spike during database maintenance"
+        },
+        {
+            "name": "auth-service",
+            "status": "healthy",
+            "uptime_percent": 99.99,
+            "last_incident": null,
+            "incident_description": null
+        },
+        {
+            "name": "staging",
+            "status": "degraded",
+            "uptime_percent": 95.5,
+            "last_incident": "2024-01-15T09:00:00Z",
+            "incident_description": "Database connection pool exhaustion causing intermittent 503 errors. Platform team investigating."
+        },
+        {
+            "name": "vector-search",
+            "status": "healthy",
+            "uptime_percent": 99.8,
+            "last_incident": "2024-01-12T22:00:00Z",
+            "incident_description": "Planned index rebuild caused 10-minute latency increase"
+        },
+        {
+            "name": "api-gateway",
+            "status": "healthy",
+            "uptime_percent": 99.99,
+            "last_incident": null,
+            "incident_description": null
+        }
+    ]
+}
