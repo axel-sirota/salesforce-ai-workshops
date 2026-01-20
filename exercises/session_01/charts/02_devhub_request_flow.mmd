@@ -1,0 +1,29 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'actorTextColor': '#01579b', 'actorBorder': '#0288d1', 'signalColor': '#01579b', 'signalTextColor': '#01579b'}}}%%
+sequenceDiagram
+    autonumber
+    participant User
+    participant Agent as DevHubAgent
+    participant LLM as OpenAI
+    participant VDB as VectorDB
+    participant TDB as TeamDB
+    participant SAPI as StatusAPI
+
+    User->>Agent: "Who owns the billing service?"
+
+    Note over Agent: Step 1: Classify Intent
+    Agent->>LLM: Classify query intent
+    LLM-->>Agent: ownership_query
+
+    Note over Agent: Step 2: Search Documentation
+    Agent->>VDB: search("billing service")
+    VDB-->>Agent: billing-service doc (similarity: 0.92)
+
+    Note over Agent: Step 3: Find Owner
+    Agent->>TDB: find_owner("billing-service")
+    TDB-->>Agent: Sarah Chen (sarah@company.com)
+
+    Note over Agent: Step 4: Generate Response
+    Agent->>LLM: Generate natural language response
+    LLM-->>Agent: Formatted answer
+
+    Agent-->>User: "Sarah Chen (sarah@company.com) owns the Billing Service"

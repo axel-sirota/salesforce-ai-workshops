@@ -1,0 +1,30 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e3f2fd'}}}%%
+flowchart TB
+    subgraph Span["Span: vector_db.search"]
+        subgraph Meta["Metadata"]
+            TraceID["trace_id: abc-123-def-456"]
+            SpanID["span_id: span-789"]
+            ParentID["parent_id: span-001"]
+            Start["start_time: 2024-01-15T10:30:00.000Z"]
+            End["end_time: 2024-01-15T10:30:00.150Z"]
+            Status["status: OK"]
+        end
+
+        subgraph Attrs["Attributes (The Secret Sauce!)"]
+            Query["db.query: 'billing service'"]
+            TopK["db.top_k: 3"]
+            Latency["db.latency_ms: 150"]
+            Count["db.result_count: 3"]
+            Sim["db.top_similarity: 0.92"]
+            System["db.system: chromadb"]
+        end
+
+        subgraph Events["Events"]
+            E1["search_started"]
+            E2["results_found"]
+        end
+    end
+
+    style Meta fill:#e8f5e9,stroke:#43a047
+    style Attrs fill:#fff3e0,stroke:#ef6c00
+    style Events fill:#fce4ec,stroke:#d81b60

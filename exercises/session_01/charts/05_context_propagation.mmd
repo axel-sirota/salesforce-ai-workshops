@@ -1,0 +1,26 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e8eaf6'}}}%%
+flowchart LR
+    subgraph Service1["Service: DevHub Agent"]
+        S1["<b>Span: devhub.query</b><br/>trace_id: abc123<br/>span_id: 001<br/>parent_id: null"]
+    end
+
+    subgraph Service2["Service: VectorDB"]
+        S2["<b>Span: vector_db.search</b><br/>trace_id: abc123<br/>span_id: 002<br/>parent_id: 001"]
+    end
+
+    subgraph Service3["Service: TeamDB"]
+        S3["<b>Span: team_db.find_owner</b><br/>trace_id: abc123<br/>span_id: 003<br/>parent_id: 001"]
+    end
+
+    subgraph Service4["Service: OpenAI"]
+        S4["<b>Span: llm.completion</b><br/>trace_id: abc123<br/>span_id: 004<br/>parent_id: 001"]
+    end
+
+    S1 -->|"traceparent:<br/>00-abc123-001-01"| S2
+    S1 -->|"traceparent:<br/>00-abc123-001-01"| S3
+    S1 -->|"traceparent:<br/>00-abc123-001-01"| S4
+
+    style S1 fill:#c5cae9,stroke:#3949ab,stroke-width:3px
+    style S2 fill:#bbdefb,stroke:#1976d2
+    style S3 fill:#fff9c4,stroke:#f9a825
+    style S4 fill:#f3e5f5,stroke:#7b1fa2

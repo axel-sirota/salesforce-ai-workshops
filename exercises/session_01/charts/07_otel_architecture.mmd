@@ -1,0 +1,29 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e3f2fd'}}}%%
+flowchart LR
+    subgraph App["Your Application (Colab Notebook)"]
+        Code["Your Code<br/>with tracer.start_as_current_span()"]
+        Tracer["Tracer<br/>(creates spans)"]
+        Provider["TracerProvider<br/>(manages tracers)"]
+    end
+
+    subgraph Pipeline["Export Pipeline"]
+        Processor["BatchSpanProcessor<br/>(batches spans for efficiency)"]
+        Exporter["OTLPSpanExporter<br/>(converts to OTLP format)"]
+    end
+
+    subgraph Backend["Observability Backend"]
+        Jaeger["Jaeger<br/>46.224.233.5:4317<br/>(stores & visualizes)"]
+        UI["Jaeger UI<br/>https://46.224.233.5/jaeger"]
+    end
+
+    Code -->|"1. creates"| Tracer
+    Tracer -->|"2. registered with"| Provider
+    Provider -->|"3. sends to"| Processor
+    Processor -->|"4. batches"| Exporter
+    Exporter -->|"5. gRPC OTLP"| Jaeger
+    Jaeger --> UI
+
+    style App fill:#e3f2fd,stroke:#1976d2
+    style Pipeline fill:#fff3e0,stroke:#ef6c00
+    style Backend fill:#e8f5e9,stroke:#43a047
+    style Jaeger fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px

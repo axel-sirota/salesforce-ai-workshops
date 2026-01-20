@@ -1,0 +1,30 @@
+%%{init: {'theme': 'base'}}%%
+flowchart TB
+    subgraph Before["WITHOUT Observability"]
+        direction TB
+        B1["User: 'Who owns billing?'"]
+        B2["Response time: 3.2 seconds"]
+        B3["Developer: 'Why is it slow?'"]
+        B4["Add print statements everywhere?"]
+        B5["Check logs... nothing useful"]
+        B6["Guess and hope"]
+
+        B1 --> B2 --> B3 --> B4 --> B5 --> B6
+    end
+
+    subgraph After["WITH Observability"]
+        direction TB
+        A1["User: 'Who owns billing?'"]
+        A2["Response time: 3.2 seconds"]
+        A3["Developer: Opens Jaeger UI"]
+        A4["Sees trace: devhub.query = 3200ms"]
+        A5["Drill down: vector_db.search = 3000ms!"]
+        A6["Root cause: Slow query detected"]
+
+        A1 --> A2 --> A3 --> A4 --> A5 --> A6
+    end
+
+    style Before fill:#ffebee,stroke:#c62828
+    style After fill:#e8f5e9,stroke:#2e7d32
+    style B6 fill:#ffcdd2,stroke:#b71c1c
+    style A6 fill:#c8e6c9,stroke:#1b5e20

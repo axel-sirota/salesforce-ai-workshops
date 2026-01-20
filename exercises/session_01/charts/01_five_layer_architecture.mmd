@@ -1,0 +1,39 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart TB
+    subgraph L1["Layer 1: Application"]
+        UI["User Interface<br/>(Web, Mobile, CLI)"]
+        API["REST/GraphQL API"]
+    end
+
+    subgraph L2["Layer 2: Gateway"]
+        Auth["Authentication"]
+        Rate["Rate Limiting"]
+        Valid["Input Validation"]
+    end
+
+    subgraph L3["Layer 3: Orchestration"]
+        Agent["AI Agent<br/>(DevHub)"]
+        Router["Intent Router"]
+        Memory["Context Memory"]
+    end
+
+    subgraph L4["Layer 4: LLM"]
+        LLM["OpenAI GPT-4<br/>(or other LLM)"]
+    end
+
+    subgraph L5["Layer 5: Data"]
+        VDB["Vector DB<br/>(ChromaDB)"]
+        TDB["Team DB<br/>(JSON)"]
+        SAPI["Status API<br/>(JSON)"]
+    end
+
+    L1 --> L2
+    L2 --> L3
+    L3 --> L4
+    L3 --> L5
+
+    style L1 fill:#e3f2fd,stroke:#1976d2
+    style L2 fill:#fff8e1,stroke:#f9a825
+    style L3 fill:#f3e5f5,stroke:#7b1fa2
+    style L4 fill:#e8f5e9,stroke:#388e3c
+    style L5 fill:#fce4ec,stroke:#c2185b

@@ -1,0 +1,24 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e8f5e9', 'primaryTextColor': '#1b5e20', 'primaryBorderColor': '#43a047'}}}%%
+flowchart TB
+    subgraph Trace["Trace ID: abc-123-def-456"]
+        Root["<b>Root Span</b><br/>devhub.query<br/>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━<br/>duration: 1250ms"]
+
+        VDB["<b>Child Span</b><br/>vector_db.search<br/>━━━━━━━━━━<br/>duration: 150ms"]
+
+        TDB["<b>Child Span</b><br/>team_db.find_owner<br/>━━━━<br/>duration: 45ms"]
+
+        LLM1["<b>Child Span</b><br/>llm.classify_intent<br/>━━━━━━━━━━━━<br/>duration: 200ms"]
+
+        LLM2["<b>Child Span</b><br/>llm.generate_response<br/>━━━━━━━━━━━━━━━━━━━━<br/>duration: 650ms"]
+    end
+
+    Root --> LLM1
+    Root --> VDB
+    Root --> TDB
+    Root --> LLM2
+
+    style Root fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
+    style VDB fill:#bbdefb,stroke:#1976d2
+    style TDB fill:#fff9c4,stroke:#f9a825
+    style LLM1 fill:#f3e5f5,stroke:#7b1fa2
+    style LLM2 fill:#f3e5f5,stroke:#7b1fa2
