@@ -17,7 +17,7 @@ Building DevHub V0 + Infrastructure for AI Observability Workshop.
 | 1 | Infrastructure (Terraform + Ansible) | ✅ Complete | 45 min | Jaeger on 46.224.233.5 |
 | 2 | Project Structure & Dependencies | ✅ Complete | 20 min | Python 3.12.12, all deps installed |
 | 3 | Data Files | ✅ Complete | 20 min | 8 docs, 4 teams, 5 owners, 5 services |
-| 4 | VectorDB Service | ⬜ Not Started | 30 min | ChromaDB |
+| 4 | VectorDB Service | ✅ Complete | 30 min | ChromaDB with failure modes |
 | 5 | TeamDB Service | ⬜ Not Started | 25 min | SQLite |
 | 6 | StatusAPI Service | ⬜ Not Started | 20 min | Mock API |
 | 7 | DevHubAgent Orchestration | ⬜ Not Started | 40 min | OpenAI agent |
@@ -49,10 +49,10 @@ Building DevHub V0 + Infrastructure for AI Observability Workshop.
 
 ## Next Steps
 
-1. **Implement Phase 4**: VectorDB Service
-   - ChromaDB-based document search
-   - Intentional failure modes (10% slow, 5% fail, 15% low similarity)
-2. Continue with Phases 5-8 sequentially
+1. **Implement Phase 5**: TeamDB Service
+   - SQLite-based team/owner lookup
+   - Intentional failure mode (10% stale data)
+2. Continue with Phases 6-8 sequentially
 
 ## Infrastructure Details
 
@@ -157,6 +157,7 @@ devhub/
 | 2026-01-20 | Phase 1: Terraform + Ansible deployment | ✅ Complete |
 | 2026-01-20 | Phase 2: Project structure, Python 3.12.12 venv, deps | ✅ Complete |
 | 2026-01-20 | Phase 3: Data files (docs, teams, status JSON) | ✅ Complete |
+| 2026-01-20 | Phase 4: VectorDB with ChromaDB + failure modes | ✅ Complete |
 
 ---
 

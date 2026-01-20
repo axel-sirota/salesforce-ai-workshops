@@ -10,9 +10,10 @@ Data layer services for DevHub:
 Note: Service implementations will be added in Phases 4-6.
 """
 
-# Imports will be added as services are implemented:
-# from .vector_db import VectorDB
+from .vector_db import VectorDB
+
+# Future imports:
 # from .team_db import TeamDB
 # from .status_api import StatusAPI
 
-__all__ = []  # Will be populated as services are added
+__all__ = ["VectorDB"]
