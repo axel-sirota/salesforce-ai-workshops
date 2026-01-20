@@ -1,0 +1,8 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart LR
+    A["Request"] --> B["???<br/>BLACK BOX<br/>???<br/>??? ms<br/>??? ops"]
+    B --> C["Response"]
+
+    D["Logs:<br/>Processing...<br/>Done."] -.-> B
+
+    style B fill:#333,color:#fff
