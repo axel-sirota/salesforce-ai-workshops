@@ -1,0 +1,54 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e3f2fd', 'primaryTextColor': '#1565c0', 'primaryBorderColor': '#1976d2', 'lineColor': '#1976d2'}}}%%
+flowchart LR
+    subgraph Input["Test Cases"]
+        TC1["LLMTestCase 1"]
+        TC2["LLMTestCase 2"]
+        TC3["LLMTestCase N"]
+    end
+
+    subgraph Metrics["Metrics"]
+        M1["G-Eval"]
+        M2["AnswerRelevancy"]
+        M3["Faithfulness"]
+        M4["Custom..."]
+    end
+
+    subgraph Judge["LLM Judge"]
+        J1["GPT-4"]
+        J2["Claude"]
+        J3["Local Model"]
+    end
+
+    subgraph Results["Evaluation Results"]
+        R1["Scores<br/>0.0 - 1.0"]
+        R2["Reasons<br/>'Response was...'"]
+        R3["Pass/Fail<br/>Status"]
+    end
+
+    subgraph Report["Final Report"]
+        REP["Summary<br/>Pass: 95/100<br/>Avg Score: 0.87"]
+    end
+
+    TC1 --> M1
+    TC2 --> M2
+    TC3 --> M3
+    TC1 --> M4
+
+    M1 --> J1
+    M2 --> J1
+    M3 --> J2
+    M4 --> J3
+
+    J1 --> R1
+    J2 --> R2
+    J3 --> R3
+
+    R1 --> REP
+    R2 --> REP
+    R3 --> REP
+
+    style Input fill:#e3f2fd,stroke:#1565c0
+    style Metrics fill:#f3e5f5,stroke:#7b1fa2
+    style Judge fill:#fff8e1,stroke:#f9a825
+    style Results fill:#e8f5e9,stroke:#2e7d32
+    style Report fill:#e1f5fe,stroke:#0277bd

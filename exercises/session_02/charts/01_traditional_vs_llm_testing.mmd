@@ -1,0 +1,43 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart TB
+    subgraph Traditional["Traditional Software Testing"]
+        direction TB
+        T1["Input:<br/>add(2, 3)"]
+        T2["Deterministic<br/>Function"]
+        T3["Output:<br/>5"]
+        T4["Assert:<br/>output == 5"]
+        T5["Result:<br/>PASS or FAIL"]
+
+        T1 --> T2
+        T2 --> T3
+        T3 --> T4
+        T4 --> T5
+    end
+
+    subgraph LLM["LLM Testing Challenge"]
+        direction TB
+        L1["Input:<br/>'What is 2+3?'"]
+        L2["Non-Deterministic<br/>LLM"]
+        L3["Possible Outputs"]
+        L4["'5'"]
+        L5["'The answer is 5'"]
+        L6["'2+3=5'"]
+        L7["'Five'"]
+        L8["Quality Score:<br/>0.0 - 1.0"]
+
+        L1 --> L2
+        L2 --> L3
+        L3 --> L4
+        L3 --> L5
+        L3 --> L6
+        L3 --> L7
+        L4 --> L8
+        L5 --> L8
+        L6 --> L8
+        L7 --> L8
+    end
+
+    style Traditional fill:#e8f5e9,stroke:#2e7d32
+    style LLM fill:#fff3e0,stroke:#ef6c00
+    style T5 fill:#c8e6c9,stroke:#2e7d32
+    style L8 fill:#ffe0b2,stroke:#ef6c00

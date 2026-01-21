@@ -1,0 +1,38 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ffebee', 'primaryTextColor': '#b71c1c', 'primaryBorderColor': '#c62828', 'lineColor': '#c62828'}}}%%
+flowchart TB
+    subgraph Before["BEFORE: Manual Testing"]
+        direction TB
+        BF1["PM: 'Testing 20 prompts<br/>manually...'"]
+        BF2["2 Days Later"]
+        BF3["'Looks good!<br/>Deploying to prod.'"]
+        BF4["2 Hours Later..."]
+        BF5["Slack: 'Everything<br/>is broken!'"]
+        BF6["Emergency<br/>Rollback at 2am"]
+
+        BF1 --> BF2 --> BF3 --> BF4 --> BF5 --> BF6
+
+        BFStats["Stats:<br/>20 tests<br/>2 days work<br/>Missed edge cases<br/>Production incident"]
+    end
+
+    subgraph After["AFTER: Automated Testing"]
+        direction TB
+        AF1["Engineer: 'Running<br/>automated evaluation...'"]
+        AF2["3 Minutes Later"]
+        AF3["'98/100 tests pass<br/>2 edge cases fail'"]
+        AF4["Fix Edge Cases"]
+        AF5["All Tests Pass"]
+        AF6["Safe Deploy<br/>Zero Incidents"]
+
+        AF1 --> AF2 --> AF3 --> AF4 --> AF5 --> AF6
+
+        AFStats["Stats:<br/>100 tests<br/>3 minutes<br/>Caught regressions<br/>No incidents"]
+    end
+
+    style Before fill:#ffebee,stroke:#c62828
+    style After fill:#e8f5e9,stroke:#2e7d32
+    style BF5 fill:#ffcdd2,stroke:#c62828
+    style BF6 fill:#ef9a9a,stroke:#b71c1c
+    style AF5 fill:#a5d6a7,stroke:#2e7d32
+    style AF6 fill:#81c784,stroke:#1b5e20
+    style BFStats fill:#ffcdd2,stroke:#c62828
+    style AFStats fill:#c8e6c9,stroke:#2e7d32

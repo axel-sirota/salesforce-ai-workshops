@@ -1,0 +1,45 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e3f2fd', 'primaryTextColor': '#1565c0', 'primaryBorderColor': '#1976d2', 'lineColor': '#1976d2'}}}%%
+flowchart TB
+    subgraph Baseline["Step 1: Establish Baseline"]
+        B1["Current Prompt<br/>Version 1.0"]
+        B2["Run All Tests<br/>100 test cases"]
+        B3["Baseline Scores<br/>Correctness: 0.85<br/>Helpfulness: 0.82"]
+
+        B1 --> B2 --> B3
+    end
+
+    subgraph Change["Step 2: Make Changes"]
+        C1["Modified Prompt<br/>Version 1.1"]
+        C2["'Improved' system<br/>message"]
+    end
+
+    subgraph Rerun["Step 3: Run Tests Again"]
+        R1["Same 100 Tests"]
+        R2["New Scores<br/>Correctness: 0.88<br/>Helpfulness: 0.79"]
+    end
+
+    subgraph Compare["Step 4: Compare Results"]
+        CMP1["Correctness: +0.03 ✓"]
+        CMP2["Helpfulness: -0.03 ✗"]
+    end
+
+    subgraph Decision["Step 5: Decision"]
+        D1{{"Regression<br/>Detected?"}}
+        D2["ACCEPT<br/>Merge to main"]
+        D3["REJECT<br/>Fix issues first"]
+
+        D1 -->|No| D2
+        D1 -->|Yes| D3
+    end
+
+    Baseline --> Change
+    Change --> Rerun
+    Rerun --> Compare
+    Compare --> Decision
+
+    style Baseline fill:#e3f2fd,stroke:#1976d2
+    style Change fill:#fff3e0,stroke:#ef6c00
+    style Rerun fill:#f3e5f5,stroke:#7b1fa2
+    style Compare fill:#fff9c4,stroke:#f9a825
+    style D2 fill:#c8e6c9,stroke:#2e7d32
+    style D3 fill:#ffcdd2,stroke:#c62828

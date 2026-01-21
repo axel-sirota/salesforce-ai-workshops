@@ -1,0 +1,53 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fce4ec', 'primaryTextColor': '#880e4f', 'primaryBorderColor': '#c2185b', 'lineColor': '#c2185b'}}}%%
+flowchart TB
+    subgraph Step1["Step 1: Criteria Definition"]
+        C1["Your Criteria:<br/>'Is the response helpful<br/>and actionable?'"]
+    end
+
+    subgraph Step2["Step 2: CoT Generation"]
+        C2["LLM generates<br/>evaluation steps"]
+        S1["Check if response<br/>addresses question"]
+        S2["Check if it provides<br/>specific actions"]
+        S3["Check if information<br/>is accurate"]
+
+        C2 --> S1
+        C2 --> S2
+        C2 --> S3
+    end
+
+    subgraph Step3["Step 3: Form-Filling"]
+        F1["Structured Prompt"]
+        F2["Add: Input"]
+        F3["Add: Actual Output"]
+        F4["Add: Expected Output"]
+
+        F1 --> F2
+        F2 --> F3
+        F3 --> F4
+    end
+
+    subgraph Step4["Step 4: LLM Scoring"]
+        L1["LLM evaluates<br/>with CoT"]
+        L2["Token Probabilities:<br/>P(1), P(2), P(3), P(4), P(5)"]
+
+        L1 --> L2
+    end
+
+    subgraph Step5["Step 5: Normalization"]
+        N1["Weighted Sum:<br/>Σ(score × probability)"]
+        N2["Final Score:<br/>0.87"]
+
+        N1 --> N2
+    end
+
+    Step1 --> Step2
+    Step2 --> Step3
+    Step3 --> Step4
+    Step4 --> Step5
+
+    style Step1 fill:#fce4ec,stroke:#c2185b
+    style Step2 fill:#f3e5f5,stroke:#7b1fa2
+    style Step3 fill:#e8eaf6,stroke:#3f51b5
+    style Step4 fill:#e3f2fd,stroke:#1976d2
+    style Step5 fill:#e8f5e9,stroke:#388e3c
+    style N2 fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
