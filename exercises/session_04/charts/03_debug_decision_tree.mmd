@@ -1,0 +1,36 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart TB
+    Start["Bug Report:<br/>'AI gave wrong answer'"]
+
+    Q1{"Error or<br/>timeout?"}
+    Q2{"Right tool<br/>called?"}
+    Q3{"Parameters<br/>correct?"}
+    Q4{"Good context<br/>retrieved?"}
+    Q5{"Output matches<br/>context?"}
+
+    L5["LAYER 5: Latency<br/>Use Jaeger"]
+    L1["LAYER 1: Prompt<br/>Check reasoning trace"]
+    L4["LAYER 4: Validation<br/>Check tool call args"]
+    L2["LAYER 2: Retrieval<br/>Check similarity scores"]
+    L3["LAYER 3: Generation<br/>Hallucination detected"]
+    OK["Response is correct"]
+
+    Start --> Q1
+    Q1 -->|"YES"| L5
+    Q1 -->|"NO"| Q2
+    Q2 -->|"NO"| L1
+    Q2 -->|"YES"| Q3
+    Q3 -->|"NO"| L4
+    Q3 -->|"YES"| Q4
+    Q4 -->|"NO"| L2
+    Q4 -->|"YES"| Q5
+    Q5 -->|"NO"| L3
+    Q5 -->|"YES"| OK
+
+    style Start fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+    style L5 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style L1 fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style L4 fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    style L2 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style L3 fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    style OK fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px

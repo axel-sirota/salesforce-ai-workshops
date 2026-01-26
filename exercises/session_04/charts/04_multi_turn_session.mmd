@@ -1,0 +1,45 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart TB
+    subgraph LangfuseUI["Langfuse Session View"]
+        direction TB
+
+        subgraph Turn1["TRACE: Turn 1"]
+            direction LR
+            T1Q["Input:<br/>'Cancel my order'"]
+            T1H["History: empty"]
+            T1D["tool-planning"]
+            T1T["find_owner"]
+            T1R["Output:<br/>'Contact Sarah...'"]
+
+            T1Q --> T1H
+            T1H --> T1D
+            T1D --> T1T
+            T1T --> T1R
+        end
+
+        subgraph Turn2["TRACE: Turn 2"]
+            direction LR
+            T2Q["Input:<br/>'Order status?'"]
+            T2H["History:<br/>'Cancel my order...'"]
+            T2D["tool-planning"]
+            T2T["find_owner<br/>WRONG!"]
+            T2R["Output:<br/>'Contact Sarah...'"]
+
+            T2Q --> T2H
+            T2H --> T2D
+            T2D --> T2T
+            T2T --> T2R
+        end
+
+        Turn1 --> Turn2
+    end
+
+    Insight["DEBUG INSIGHT:<br/>History contains 'cancel'<br/>which influenced Turn 2's<br/>tool selection"]
+
+    T2H --> Insight
+
+    style T2H fill:#ffcdd2,stroke:#c62828,stroke-width:3px
+    style T2T fill:#ffcdd2,stroke:#c62828,stroke-width:3px
+    style Insight fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+    style Turn1 fill:#e8f5e9,stroke:#2e7d32
+    style Turn2 fill:#ffebee,stroke:#c62828

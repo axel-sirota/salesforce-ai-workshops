@@ -1,0 +1,50 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart LR
+    subgraph Step1["1. FIND"]
+        direction TB
+        F1["Production<br/>failure occurs"]
+        F2["Find trace<br/>in Langfuse"]
+        F1 --> F2
+    end
+
+    subgraph Step2["2. ANALYZE"]
+        direction TB
+        A1["Apply 5-Layer<br/>Framework"]
+        A2["Identify<br/>root cause"]
+        A1 --> A2
+    end
+
+    subgraph Step3["3. EXPORT"]
+        direction TB
+        E1["Extract from trace:"]
+        E2["- Input query<br/>- Output response<br/>- Retrieved context"]
+        E1 --> E2
+    end
+
+    subgraph Step4["4. TEST"]
+        direction TB
+        T1["Create LLMTestCase"]
+        T2["Add metric:<br/>FaithfulnessMetric"]
+        T3["def test_regression()"]
+        T1 --> T2
+        T2 --> T3
+    end
+
+    subgraph Step5["5. CI/CD"]
+        direction TB
+        C1["Add to test suite"]
+        C2["Run on every PR"]
+        C3["Never repeat<br/>same bug!"]
+        C1 --> C2
+        C2 --> C3
+    end
+
+    Step1 --> Step2
+    Step2 --> Step3
+    Step3 --> Step4
+    Step4 --> Step5
+
+    style F1 fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+    style C3 fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
+    style Step1 fill:#ffebee,stroke:#c62828
+    style Step5 fill:#e8f5e9,stroke:#2e7d32

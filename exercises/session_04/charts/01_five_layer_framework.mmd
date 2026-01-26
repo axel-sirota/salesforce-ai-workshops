@@ -1,0 +1,36 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart LR
+    subgraph Layers["5-Layer LLM Failure Framework"]
+        direction TB
+        L1["Layer 1: PROMPT<br/>Wrong tool selected<br/>Conflicting instructions"]
+        L2["Layer 2: RETRIEVAL<br/>Low similarity scores<br/>Missing documents"]
+        L3["Layer 3: GENERATION<br/>Hallucination<br/>Invented details"]
+        L4["Layer 4: VALIDATION<br/>Wrong parameters<br/>Schema mismatch"]
+        L5["Layer 5: LATENCY<br/>Timeouts<br/>Slow queries"]
+
+        L1 --> L2
+        L2 --> L3
+        L3 --> L4
+        L4 --> L5
+    end
+
+    subgraph Tools["Debug Tools"]
+        direction TB
+        T1["Langfuse:<br/>Check reasoning"]
+        T2["Langfuse:<br/>Check similarity"]
+        T3["Langfuse:<br/>Compare context vs output"]
+        T4["Langfuse:<br/>Check tool args"]
+        T5["Jaeger:<br/>Check span durations"]
+    end
+
+    L1 -.-> T1
+    L2 -.-> T2
+    L3 -.-> T3
+    L4 -.-> T4
+    L5 -.-> T5
+
+    style L1 fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style L2 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style L3 fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    style L4 fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    style L5 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px

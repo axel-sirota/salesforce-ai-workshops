@@ -1,0 +1,28 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart TB
+    subgraph Conversation["Multi-Turn Conversation"]
+        direction TB
+        T1["Turn 1:<br/>'Cancel my order #12345'"]
+        T2["Turn 2:<br/>'What is the status of order #67890?'"]
+    end
+
+    subgraph Agent["DevHub Agent Response"]
+        direction TB
+        R1["find_owner<br/>Correct for cancellation"]
+        R2["find_owner<br/>WRONG for status query!"]
+        Expected["check_status<br/>Expected tool"]
+    end
+
+    T1 --> R1
+    T2 --> R2
+    T2 -.->|"Should call"| Expected
+
+    subgraph Mystery["The Mystery"]
+        Q["WHY did the model<br/>call find_owner<br/>instead of check_status?"]
+    end
+
+    R2 --> Q
+
+    style R2 fill:#ffcdd2,stroke:#c62828,stroke-width:3px
+    style Expected fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+    style Q fill:#fff9c4,stroke:#f9a825,stroke-width:2px

@@ -1,0 +1,43 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart TB
+    subgraph Session["SESSION: student-session-abc123"]
+        direction TB
+
+        subgraph Trace1["TRACE 1: Query 'How to authenticate?'"]
+            direction LR
+            T1S1["Span:<br/>tool-planning"]
+            T1G1["Generation:<br/>GPT-4o-mini"]
+            T1S2["Span:<br/>tool.search_docs"]
+            T1S3["Span:<br/>response-synthesis"]
+
+            T1S1 --> T1G1
+            T1G1 --> T1S2
+            T1S2 --> T1S3
+        end
+
+        subgraph Trace2["TRACE 2: Query 'Who owns billing?'"]
+            direction LR
+            T2S1["Span:<br/>tool-planning"]
+            T2G1["Generation:<br/>GPT-4o-mini"]
+            T2S2["Span:<br/>tool.find_owner"]
+            T2S3["Span:<br/>response-synthesis"]
+
+            T2S1 --> T2G1
+            T2G1 --> T2S2
+            T2S2 --> T2S3
+        end
+
+        Trace1 --> Trace2
+    end
+
+    subgraph Legend["Hierarchy"]
+        H1["Session"] --> H2["Traces"]
+        H2 --> H3["Spans"]
+        H3 --> H4["Generations"]
+    end
+
+    style Session fill:#f5f5f5,stroke:#616161,stroke-width:2px
+    style Trace1 fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style Trace2 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style T1G1 fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    style T2G1 fill:#fff3e0,stroke:#ef6c00,stroke-width:2px

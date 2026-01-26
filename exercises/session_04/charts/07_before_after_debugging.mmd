@@ -1,0 +1,40 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart TB
+    subgraph Before["BEFORE: Debugging Blind"]
+        direction TB
+        B1["Bug: 'Wrong tool called'"]
+        B2["Check logs:<br/>tool_called=find_owner"]
+        B3["WHY?<br/>No visibility"]
+        B4["Try random fixes<br/>for HOURS"]
+        B5["Maybe fixed?<br/>Can't verify"]
+        BT["Time: HOURS"]
+
+        B1 --> B2
+        B2 --> B3
+        B3 --> B4
+        B4 --> B5
+        B5 --> BT
+    end
+
+    subgraph After["AFTER: With Langfuse"]
+        direction TB
+        A1["Bug: 'Wrong tool called'"]
+        A2["Find trace<br/>in Langfuse"]
+        A3["See: History has<br/>'cancel' keyword"]
+        A4["Root cause:<br/>Context bleed"]
+        A5["Fix: Clear context<br/>or add instruction"]
+        AT["Time: 30 SECONDS"]
+
+        A1 --> A2
+        A2 --> A3
+        A3 --> A4
+        A4 --> A5
+        A5 --> AT
+    end
+
+    style Before fill:#ffebee,stroke:#c62828,stroke-width:2px
+    style After fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style BT fill:#ffcdd2,stroke:#c62828,stroke-width:3px
+    style AT fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
+    style B3 fill:#ffcdd2,stroke:#c62828
+    style A3 fill:#c8e6c9,stroke:#2e7d32
