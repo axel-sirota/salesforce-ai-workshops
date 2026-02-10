@@ -1,0 +1,32 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart TB
+    Start["What PII do you<br/>need to detect?"]
+
+    Q1{"Fixed format?<br/>(SSN, phone,<br/>credit card)"}
+    Q2{"Names, addresses,<br/>or free-form<br/>entities?"}
+    Q3{"Need multiple<br/>recognizer types<br/>+ context?"}
+    Q4{"Production<br/>system with<br/>compliance?"}
+
+    R1["Use Regex<br/>Fast, deterministic<br/>No ML needed"]
+    R2["Use NER<br/>(spaCy model)<br/>Handles variations"]
+    R3["Use Presidio<br/>Combines all methods<br/>+ context scoring"]
+    R4["Use Presidio<br/>+ Custom Recognizers<br/>for domain-specific PII"]
+
+    Start --> Q1
+    Q1 -->|"YES"| R1
+    Q1 -->|"NO"| Q2
+    Q2 -->|"YES"| R2
+    Q2 -->|"NO"| Q3
+    Q3 -->|"YES"| R3
+    Q3 -->|"NO"| Q4
+    Q4 -->|"YES"| R4
+    Q4 -->|"NO"| R1
+
+    style R1 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style R2 fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style R3 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style R4 fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style Q1 fill:#e1f5fe,stroke:#0288d1
+    style Q2 fill:#e1f5fe,stroke:#0288d1
+    style Q3 fill:#e1f5fe,stroke:#0288d1
+    style Q4 fill:#e1f5fe,stroke:#0288d1

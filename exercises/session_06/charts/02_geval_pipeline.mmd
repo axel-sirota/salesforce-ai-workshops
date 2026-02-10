@@ -1,0 +1,32 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#fce4ec', 'primaryTextColor': '#880e4f', 'primaryBorderColor': '#c2185b', 'lineColor': '#c2185b'}}}%%
+flowchart TB
+    subgraph Input["Evaluation Input"]
+        direction LR
+        I1["User Query<br/>(input)"]
+        I2["DevHub Response<br/>(actual_output)"]
+    end
+
+    subgraph Criteria["Your Criteria"]
+        C1["'Determine whether the<br/>response contains factually<br/>accurate information relevant<br/>to the developer query'"]
+    end
+
+    subgraph Judge["Gemini Flash (Judge)"]
+        direction TB
+        COT["Auto-generated<br/>Chain-of-Thought<br/>evaluation steps"]
+        SCORE["Scoring:<br/>Token probabilities<br/>P(1), P(2)...P(5)"]
+        COT --> SCORE
+    end
+
+    subgraph Output["Score"]
+        RESULT["Normalized Score: 0.82<br/>vs Threshold: 0.70<br/>PASS"]
+    end
+
+    Input --> Judge
+    Criteria --> Judge
+    Judge --> Output
+
+    style Input fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style Criteria fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    style Judge fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style Output fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style RESULT fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px

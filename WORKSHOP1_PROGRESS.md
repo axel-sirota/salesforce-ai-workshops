@@ -18,10 +18,10 @@ Building DevHub V0 + Infrastructure for AI Observability Workshop.
 | 2 | Project Structure & Dependencies | ✅ Complete | 20 min | Python 3.12.12, all deps installed |
 | 3 | Data Files | ✅ Complete | 20 min | 8 docs, 4 teams, 5 owners, 5 services |
 | 4 | VectorDB Service | ✅ Complete | 30 min | ChromaDB with failure modes |
-| 5 | TeamDB Service | ⬜ Not Started | 25 min | SQLite |
-| 6 | StatusAPI Service | ⬜ Not Started | 20 min | Mock API |
-| 7 | DevHubAgent Orchestration | ⬜ Not Started | 40 min | OpenAI agent |
-| 8 | CLI & V0 Verification | ⬜ Not Started | 25 min | Final testing |
+| 5 | TeamDB Service | ✅ Complete | 25 min | SQLite with stale data mode |
+| 6 | StatusAPI Service | ✅ Complete | 20 min | Mock API with timeout mode |
+| 7 | DevHubAgent Orchestration | ✅ Complete | 40 min | GPT-4o-mini tool planning |
+| 8 | CLI & V0 Verification | ✅ Complete | 25 min | Rich CLI, all tests passing |
 
 **Legend**: ⬜ Not Started | 🔄 In Progress | ✅ Complete | ❌ Blocked
 
@@ -49,10 +49,11 @@ Building DevHub V0 + Infrastructure for AI Observability Workshop.
 
 ## Next Steps
 
-1. **Implement Phase 5**: TeamDB Service
-   - SQLite-based team/owner lookup
-   - Intentional failure mode (10% stale data)
-2. Continue with Phases 6-8 sequentially
+**Workshop 1 V0 is COMPLETE!**
+
+DevHub V0 is ready for the AI Observability workshop. Students will:
+1. Session 1: Add OpenTelemetry tracing to find intentional problems
+2. Session 2: Add DeepEval testing to catch regressions
 
 ## Infrastructure Details
 
@@ -158,6 +159,10 @@ devhub/
 | 2026-01-20 | Phase 2: Project structure, Python 3.12.12 venv, deps | ✅ Complete |
 | 2026-01-20 | Phase 3: Data files (docs, teams, status JSON) | ✅ Complete |
 | 2026-01-20 | Phase 4: VectorDB with ChromaDB + failure modes | ✅ Complete |
+| 2026-01-20 | Phase 5: TeamDB with SQLite + stale data mode | ✅ Complete |
+| 2026-01-20 | Phase 6: StatusAPI with timeout mode | ✅ Complete |
+| 2026-01-20 | Phase 7: DevHubAgent with GPT-4o-mini | ✅ Complete |
+| 2026-01-20 | Phase 8: CLI with Rich, all verifications pass | ✅ Complete |
 
 ---
 

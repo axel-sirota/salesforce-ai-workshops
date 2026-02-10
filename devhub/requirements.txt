@@ -8,8 +8,11 @@ opentelemetry-sdk>=1.20.0
 opentelemetry-exporter-otlp-proto-grpc>=1.20.0
 
 # Testing (for Session 2 - students will use these)
-deepeval>=0.21.0
+deepeval>=3.0.0
 pytest>=7.0.0
+
+# LLM Observability (for Session 4 - students will use these)
+langfuse>=3.0.0
 
 # Utilities
 python-dotenv>=1.0.0

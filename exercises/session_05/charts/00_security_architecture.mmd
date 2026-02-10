@@ -1,0 +1,43 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart LR
+    subgraph Input["User Input"]
+        U["User Query"]
+    end
+
+    subgraph Security["Security Layer"]
+        direction TB
+        PII["PII Detection<br/>(Presidio)"]
+        INJ["Injection Check<br/>(Regex + DeBERTa)"]
+        PII --> INJ
+    end
+
+    subgraph Agent["DevHub Agent"]
+        direction TB
+        PLAN["Tool Planning<br/>(GPT-4o-mini)"]
+        TOOLS["Tool Execution<br/>(ChromaDB, SQLite, API)"]
+        SYNTH["Response Synthesis<br/>(GPT-4o-mini)"]
+        PLAN --> TOOLS
+        TOOLS --> SYNTH
+    end
+
+    subgraph Audit["Audit Layer"]
+        LOG["Audit Logger<br/>(SQLite)"]
+    end
+
+    subgraph Output["Response"]
+        R["Safe Response"]
+    end
+
+    U --> PII
+    INJ -->|"Clean"| PLAN
+    INJ -->|"Blocked"| BLOCK["Blocked<br/>Response"]
+    SYNTH --> LOG
+    LOG --> R
+
+    style Security fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style Agent fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style Audit fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style BLOCK fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+    style PII fill:#c8e6c9,stroke:#2e7d32
+    style INJ fill:#c8e6c9,stroke:#2e7d32
+    style LOG fill:#ffe0b2,stroke:#f57c00

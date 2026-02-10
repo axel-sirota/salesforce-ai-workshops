@@ -1,0 +1,36 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e8f5e9', 'primaryTextColor': '#1b5e20', 'primaryBorderColor': '#388e3c', 'lineColor': '#388e3c', 'secondaryColor': '#e3f2fd', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart TB
+    INPUT["User Query"]
+
+    subgraph Tier1["Tier 1: Regex (Fast)"]
+        direction TB
+        T1["Compiled Regex Patterns<br/>(9 patterns)"]
+        T1C{"Match<br/>found?"}
+        T1 --> T1C
+    end
+
+    subgraph Tier2["Tier 2: ML Classifier (Accurate)"]
+        direction TB
+        T2["DeBERTa v3<br/>(protectai/deberta-v3-<br/>base-prompt-injection-v2)"]
+        T2C{"Score >= 0.85<br/>AND label =<br/>INJECTION?"}
+        T2 --> T2C
+    end
+
+    BLOCK["BLOCKED<br/>Injection Detected"]
+    PASS["PASSED<br/>Send to Agent"]
+
+    INPUT --> T1
+    T1C -->|"YES"| BLOCK
+    T1C -->|"NO"| T2
+    T2C -->|"YES"| BLOCK
+    T2C -->|"NO"| PASS
+
+    T1_STATS["~0.1ms<br/>Catches obvious attacks"]
+    T2_STATS["~50ms<br/>Catches subtle attacks"]
+
+    style Tier1 fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style Tier2 fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style BLOCK fill:#ffcdd2,stroke:#c62828,stroke-width:3px
+    style PASS fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
+    style T1_STATS fill:#f1f8e9,stroke:#8bc34a,stroke-width:1px
+    style T2_STATS fill:#e1f5fe,stroke:#03a9f4,stroke-width:1px

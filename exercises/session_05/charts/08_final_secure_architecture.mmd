@@ -1,0 +1,36 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart TB
+    subgraph Before["BEFORE: Unprotected DevHub"]
+        direction TB
+        B1["User Query<br/>(PII, injections,<br/>anything goes)"]
+        B2["GPT-4o-mini<br/>(No filtering)"]
+        B3["Response<br/>(PII leaks,<br/>no audit)"]
+        B1 --> B2 --> B3
+    end
+
+    subgraph After["AFTER: SecureDevHub"]
+        direction TB
+        A1["User Query"]
+        A2["PII Detection<br/>(Presidio)<br/>Redact sensitive data"]
+        A3["Injection Defense<br/>(Regex + DeBERTa)<br/>Block attacks"]
+        A4["DevHub Agent<br/>(GPT-4o-mini)<br/>Safe processing"]
+        A5["Audit Logger<br/>(SQLite)<br/>Every request logged"]
+        A6["Safe Response"]
+
+        A1 --> A2
+        A2 --> A3
+        A3 --> A4
+        A4 --> A5
+        A5 --> A6
+    end
+
+    style Before fill:#ffebee,stroke:#c62828,stroke-width:2px
+    style After fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style B1 fill:#ffcdd2,stroke:#c62828
+    style B2 fill:#ffcdd2,stroke:#c62828
+    style B3 fill:#ffcdd2,stroke:#c62828,stroke-width:3px
+    style A2 fill:#c8e6c9,stroke:#2e7d32
+    style A3 fill:#c8e6c9,stroke:#2e7d32
+    style A4 fill:#bbdefb,stroke:#1976d2
+    style A5 fill:#ffe0b2,stroke:#f57c00
+    style A6 fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px

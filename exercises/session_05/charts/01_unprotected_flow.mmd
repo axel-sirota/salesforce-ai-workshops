@@ -1,0 +1,22 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ffebee', 'primaryTextColor': '#b71c1c', 'primaryBorderColor': '#c62828', 'lineColor': '#c62828', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart LR
+    U["User Query<br/>(may contain PII,<br/>injections, anything)"]
+    LLM["GPT-4o-mini<br/>(No filtering)"]
+    TOOLS["Tools<br/>(ChromaDB, SQLite)"]
+    R["Response<br/>(may leak PII,<br/>follow injections)"]
+
+    U -->|"Raw input"| LLM
+    LLM --> TOOLS
+    TOOLS --> LLM
+    LLM -->|"Unfiltered"| R
+
+    NO1["No PII<br/>Detection"]
+    NO2["No Injection<br/>Check"]
+    NO3["No Audit<br/>Trail"]
+
+    style U fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+    style LLM fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+    style R fill:#ffcdd2,stroke:#c62828,stroke-width:2px
+    style NO1 fill:#ffebee,stroke:#ef9a9a,stroke-width:1px,stroke-dasharray: 5 5
+    style NO2 fill:#ffebee,stroke:#ef9a9a,stroke-width:1px,stroke-dasharray: 5 5
+    style NO3 fill:#ffebee,stroke:#ef9a9a,stroke-width:1px,stroke-dasharray: 5 5

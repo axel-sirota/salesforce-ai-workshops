@@ -1,0 +1,40 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart TB
+    subgraph Red["RED: Write Failing Test"]
+        direction TB
+        R1["Define quality criteria<br/>for a specific weakness"]
+        R2["Create test cases<br/>with expected behavior"]
+        R3["Run against current prompt<br/>Tests FAIL"]
+        R1 --> R2 --> R3
+    end
+
+    subgraph Green["GREEN: Improve Prompt"]
+        direction TB
+        G1["Analyze why tests fail"]
+        G2["Modify prompt to<br/>address weakness"]
+        G3["Run target tests<br/>Tests PASS"]
+        G1 --> G2 --> G3
+    end
+
+    subgraph Refactor["REFACTOR: Regression Check"]
+        direction TB
+        F1["Run ALL tests<br/>(new + existing)"]
+        F2{"All<br/>pass?"}
+        F3["Version & deploy"]
+        F4["Fix regressions<br/>without losing gains"]
+        F1 --> F2
+        F2 -->|"YES"| F3
+        F2 -->|"NO"| F4
+        F4 --> F1
+    end
+
+    Red --> Green
+    Green --> Refactor
+
+    style Red fill:#ffebee,stroke:#c62828,stroke-width:2px
+    style Green fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style Refactor fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style R3 fill:#ffcdd2,stroke:#c62828,stroke-width:3px
+    style G3 fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
+    style F3 fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
+    style F4 fill:#fff9c4,stroke:#f9a825,stroke-width:2px

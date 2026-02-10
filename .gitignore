@@ -228,6 +228,7 @@ deploy/ansible/inventory/hosts.yml
 # Project-specific
 initial_research/
 plans/
+context/
 .claude/settings.local.json
 
 # DevHub venv

@@ -1,0 +1,519 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Session 4: Debugging LLM-Based Features\n",
+    "\n",
+    "**Salesforce AI Workshop Series**\n",
+    "\n",
+    "---\n",
+    "\n",
+    "## Learning Objectives\n",
+    "\n",
+    "By the end of this session, you will be able to:\n",
+    "\n",
+    "1. **Debug LLM reasoning chains** to understand WHY models made decisions\n",
+    "2. **Distinguish system vs model failures** in 30 seconds using traces\n",
+    "3. **Use Langfuse** for LLM-specific observability (generations, tool calls, reasoning)\n",
+    "4. **Replay production failures** for root cause analysis\n",
+    "5. **Convert failures into regression tests** that prevent recurrence\n",
+    "\n",
+    "## Prerequisites\n",
+    "\n",
+    "- Sessions 1-2 completed (DevHub with OpenTelemetry + DeepEval testing)\n",
+    "- Basic understanding of LLM tool calling\n",
+    "- No prior Langfuse experience required\n",
+    "\n",
+    "## Session Structure\n",
+    "\n",
+    "| Time | Activity |\n",
+    "|------|----------|\n",
+    "| 0:00-0:15 | Setup + The Wrong Tool Mystery |\n",
+    "| 0:15-0:35 | 5-Layer Failure Framework |\n",
+    "| 0:35-1:05 | **Lab 1:** Add Langfuse to DevHub |\n",
+    "| 1:05-1:15 | Break |\n",
+    "| 1:15-1:30 | Demo: Trace Replay Workflow |\n",
+    "| 1:30-2:10 | **Lab 2:** Debug 4 Failure Scenarios |\n",
+    "| 2:10-2:35 | **Lab 3:** Failure → Regression Test |\n",
+    "| 2:35-2:45 | Wrap-up + Take-Home |"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## The Problem: \"Why Does The Agent Keep Calling The Wrong Tool?\"\n",
+    "\n",
+    "Your customer service agent repeatedly invokes the wrong tool...\n",
+    "\n",
+    "**The Bug Report:**\n",
+    "> \"User asked about order STATUS, but the agent called find_owner instead of check_status!\"\n",
+    "\n",
+    "You check your application logs:\n",
+    "```\n",
+    "INFO: query=\"What's the status of order #67890?\"\n",
+    "INFO: tool_called=find_owner\n",
+    "INFO: tool_args={\"service_name\": \"orders\"}\n",
+    "```\n",
+    "\n",
+    "That tells you WHAT happened, but not WHY.\n",
+    "\n",
+    "**Questions logs DON'T answer:**\n",
+    "- Why did the model choose find_owner instead of check_status?\n",
+    "- What was in the conversation history that influenced this?\n",
+    "- What was the model's reasoning process?\n",
+    "\n",
+    "**Is this:**\n",
+    "- A routing bug in your code?\n",
+    "- A prompt problem?\n",
+    "- A model error?\n",
+    "- Context from a previous conversation turn?\n",
+    "\n",
+    "**Without LLM observability, you're debugging blind.**\n",
+    "\n",
+    "This session teaches you how to see inside the LLM's reasoning process."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## What We'll Build Today\n",
+    "\n",
+    "| Component | Purpose |\n",
+    "|-----------|---------|\n",
+    "| **Langfuse Integration** | See LLM reasoning, not just actions |\n",
+    "| **5-Layer Framework** | Systematic failure categorization |\n",
+    "| **Debug 4 Scenarios** | Hands-on failure diagnosis |\n",
+    "| **Failure → Test Pipeline** | Never have the same bug twice |\n",
+    "\n",
+    "### The Key Insight\n",
+    "\n",
+    "**Session 1 (Jaeger/OpenTelemetry):** Shows WHERE something happened\n",
+    "- Service latencies, error propagation, bottlenecks\n",
+    "\n",
+    "**Session 4 (Langfuse):** Shows WHY the model decided\n",
+    "- Tool selection reasoning, context that influenced decisions, hallucination detection\n",
+    "\n",
+    "Both are essential. Today we add the \"WHY\" layer."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# =============================================================================\n",
+    "# SETUP: Install Required Packages\n",
+    "# =============================================================================\n",
+    "# Langfuse v3 for LLM observability - captures reasoning chains, tool calls\n",
+    "# DeepEval 3.x for evaluation metrics - we'll use FaithfulnessMetric for hallucinations\n",
+    "# OpenAI for LLM calls, ChromaDB for vector search, Rich for pretty output\n",
+    "\n",
+    "!pip install -q langfuse>=3.0.0 deepeval>=3.0.0 openai>=1.0.0 chromadb>=0.4.0 rich>=13.0.0\n",
+    "\n",
+    "print(\"✅ Packages installed!\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# =============================================================================\n",
+    "# CONFIGURATION: API Keys and Student Identity\n",
+    "# =============================================================================\n",
+    "# This cell sets up all the credentials needed for the workshop.\n",
+    "# Langfuse captures LLM traces, OpenAI powers the DevHub agent.\n",
+    "\n",
+    "import os\n",
+    "import uuid\n",
+    "\n",
+    "# ─────────────────────────────────────────────────────────────────────────────\n",
+    "# INSTRUCTOR: Update these before the workshop\n",
+    "# ─────────────────────────────────────────────────────────────────────────────\n",
+    "LANGFUSE_PUBLIC_KEY = \"pk-lf-...\"  # Instructor provides - get from Langfuse Cloud\n",
+    "LANGFUSE_SECRET_KEY = \"sk-lf-...\"  # Instructor provides - keep secret!\n",
+    "LANGFUSE_HOST = \"https://cloud.langfuse.com\"  # Langfuse Cloud endpoint\n",
+    "\n",
+    "# OpenAI API Key (students may have their own)\n",
+    "OPENAI_API_KEY = \"sk-...\"  # Or use instructor-provided key\n",
+    "\n",
+    "# ─────────────────────────────────────────────────────────────────────────────\n",
+    "# STUDENT: Change this to your name (lowercase, no spaces)\n",
+    "# ─────────────────────────────────────────────────────────────────────────────\n",
+    "STUDENT_NAME = \"your-name-here\"  # e.g., \"sarah-chen\" - used to identify your traces\n",
+    "\n",
+    "# Set environment variables - Langfuse SDK reads these automatically\n",
+    "os.environ[\"LANGFUSE_PUBLIC_KEY\"] = LANGFUSE_PUBLIC_KEY\n",
+    "os.environ[\"LANGFUSE_SECRET_KEY\"] = LANGFUSE_SECRET_KEY\n",
+    "os.environ[\"LANGFUSE_HOST\"] = LANGFUSE_HOST\n",
+    "os.environ[\"OPENAI_API_KEY\"] = OPENAI_API_KEY\n",
+    "\n",
+    "# Generate unique session ID for this workshop run\n",
+    "# This groups all your traces together in Langfuse\n",
+    "SESSION_ID = f\"{STUDENT_NAME}-session-{uuid.uuid4().hex[:8]}\"\n",
+    "\n",
+    "print(f\"👤 Student: {STUDENT_NAME}\")\n",
+    "print(f\"🔑 Session ID: {SESSION_ID}\")\n",
+    "print(f\"🌐 Langfuse Host: {LANGFUSE_HOST}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# VERIFY: Test Langfuse Connection\n# =============================================================================\n# NOTE: Langfuse v3's get_client() is idempotent (singleton pattern).\n# You can safely re-run this cell without issues - it returns the same client.\n# This is different from OpenTelemetry's set_tracer_provider() which can only\n# be called once per process.\n# =============================================================================\n\nfrom langfuse import get_client\n\ntry:\n    # get_client() returns singleton - safe to call multiple times\n    langfuse = get_client()\n\n    # Create a test trace to verify connection\n    with langfuse.start_as_current_span(name=\"connection-test\") as span:\n        span.update(\n            input={\"test\": \"connection\"},\n            output={\"status\": \"success\"}\n        )\n\n    # Flush to ensure trace is sent\n    langfuse.flush()\n\n    print(\"✅ Langfuse connection successful!\")\n    print(f\"🔗 View traces at: {LANGFUSE_HOST}\")\n    print(f\"🔍 Filter by session: {SESSION_ID}\")\n\nexcept Exception as e:\n    print(f\"❌ Langfuse connection failed: {e}\")\n    print(\"Check your LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# LOAD: DevHub Components and Configuration\n# =============================================================================\n# We define DevHub inline for this session so everything runs in Colab.\n# In production, you'd import from your package.\n\nimport sys\nsys.path.insert(0, '/content')  # For Colab compatibility\n\nfrom dataclasses import dataclass\nimport json\nimport random\nimport time\nfrom typing import Optional\nfrom openai import OpenAI\n\n# -----------------------------------------------------------------------------\n# Configuration dataclass - controls DevHub behavior\n# -----------------------------------------------------------------------------\n@dataclass\nclass Config:\n    \"\"\"DevHub configuration with intentional failure modes for debugging practice.\"\"\"\n\n    # LLM Settings\n    LLM_MODEL: str = \"gpt-4o-mini\"      # Fast, cheap model for workshop\n    LLM_MAX_TOKENS: int = 1024           # Reasonable response length\n    LLM_TEMPERATURE: float = 0.3         # Low temp for consistent tool selection\n\n    # Latency ranges (milliseconds) - simulates real service behavior\n    VECTOR_DB_LATENCY_MIN: int = 50\n    VECTOR_DB_LATENCY_MAX: int = 200\n    TEAM_DB_LATENCY_MIN: int = 20\n    TEAM_DB_LATENCY_MAX: int = 100\n    STATUS_API_LATENCY_MIN: int = 30\n    STATUS_API_LATENCY_MAX: int = 150\n\n    # Session 1-2 failure rates (infrastructure issues)\n    VECTOR_DB_FAILURE_RATE: float = 0.05\n    VECTOR_DB_SLOW_QUERY_RATE: float = 0.10\n    VECTOR_DB_LOW_SIMILARITY_RATE: float = 0.15\n    TEAM_DB_STALE_DATA_RATE: float = 0.10\n    STATUS_API_TIMEOUT_RATE: float = 0.02\n\n    # Session 4: LLM-specific failure rates (NEW - these cause debugging scenarios)\n    CONTEXT_BLEED_RATE: float = 0.20      # Previous context affects tool selection\n    HALLUCINATION_RATE: float = 0.15      # Model invents details not in context\n    PARAM_ERROR_RATE: float = 0.10        # Wrong parameters to correct tool\n\nconfig = Config()\nprint(\"⚙️ Config loaded with Session 4 failure modes:\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# DATA: Load DevHub Knowledge Base\n# =============================================================================\n# This data represents our simulated internal developer documentation system.\n# In production, this would be fetched from real databases and APIs.\n\n# Documentation entries - these are what search_docs tool searches through\nDOCS_DATA = [\n    {\n        \"id\": \"doc-payments-auth\",\n        \"title\": \"Payments API Authentication\",\n        \"category\": \"api\",\n        \"content\": \"To authenticate with the Payments API, use OAuth 2.0 client credentials flow. Obtain your client_id and client_secret from the Developer Portal. Make a POST request to /oauth/token with grant_type=client_credentials. The response includes an access_token valid for 1 hour. Include this token in the Authorization header as 'Bearer {token}' for all subsequent API calls.\"\n    },\n    {\n        \"id\": \"doc-billing-service\",\n        \"title\": \"Billing Service Overview\",\n        \"category\": \"service\",\n        \"content\": \"The Billing Service handles all subscription management, invoice generation, and payment processing. Key endpoints: POST /v1/subscriptions (create), GET /v1/invoices (list), POST /v1/refunds (process refund). Rate limit: 100 requests/minute. Contact #payments-support for billing issues.\"\n    },\n    {\n        \"id\": \"doc-error-handling\",\n        \"title\": \"Error Handling Standards\",\n        \"category\": \"standards\",\n        \"content\": \"All APIs return standard error responses with error_code, message, and request_id fields. Common codes: 400 (bad request), 401 (unauthorized), 429 (rate limited), 500 (internal error). Always log the request_id for debugging. Implement exponential backoff for 429 and 5xx errors.\"\n    },\n    {\n        \"id\": \"doc-rate-limiting\",\n        \"title\": \"Rate Limiting Configuration\",\n        \"category\": \"guide\",\n        \"content\": \"Default rate limits: 100 req/min for standard tier, 1000 req/min for premium. Limits are per API key. Response header X-RateLimit-Remaining shows remaining quota. When rate limited, wait for X-RateLimit-Reset seconds before retrying. Contact platform team to request limit increases.\"\n    }\n]\n\n# Teams and owners - this is what find_owner tool searches through\nTEAMS_DATA = {\n    \"teams\": [\n        {\"id\": \"team-payments\", \"name\": \"Payments Team\", \"slack_channel\": \"#payments-support\"},\n        {\"id\": \"team-platform\", \"name\": \"Platform Team\", \"slack_channel\": \"#platform-help\"},\n        {\"id\": \"team-data\", \"name\": \"Data Platform\", \"slack_channel\": \"#data-platform\"}\n    ],\n    \"owners\": [\n        {\"id\": \"owner-sarah\", \"name\": \"Sarah Chen\", \"email\": \"sarah.chen@company.com\",\n         \"team_id\": \"team-payments\", \"services\": [\"payments-api\", \"billing-service\", \"billing\"], \"is_active\": True},\n        {\"id\": \"owner-james\", \"name\": \"James Wilson\", \"email\": \"james.wilson@company.com\",\n         \"team_id\": \"team-platform\", \"services\": [\"rate-limiting\", \"api-gateway\"], \"is_active\": True},\n        {\"id\": \"owner-david\", \"name\": \"David Kim\", \"email\": \"david.kim@company.com\",\n         \"team_id\": \"team-data\", \"services\": [\"vector-search\", \"embeddings\"], \"is_active\": False}  # Intentionally inactive for stale data scenario\n    ]\n}\n\n# Service status - this is what check_status tool queries\nSTATUS_DATA = {\n    \"services\": [\n        {\"name\": \"payments-api\", \"status\": \"healthy\", \"uptime_percent\": 99.95},\n        {\"name\": \"auth-service\", \"status\": \"healthy\", \"uptime_percent\": 99.99},\n        {\"name\": \"staging\", \"status\": \"degraded\", \"uptime_percent\": 95.5,\n         \"last_incident\": \"2024-01-15T09:00:00Z\",\n         \"incident_description\": \"Database connection pool exhaustion causing intermittent 503 errors\"},\n        {\"name\": \"vector-search\", \"status\": \"healthy\", \"uptime_percent\": 99.8},\n        {\"name\": \"api-gateway\", \"status\": \"healthy\", \"uptime_percent\": 99.97}\n    ]\n}\n\nprint(f\"📚 Loaded: {len(DOCS_DATA)} docs, {len(TEAMS_DATA['owners'])} owners, {len(STATUS_DATA['services'])} services\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SERVICES: Simplified DevHub Services for Session 4\n# =============================================================================\n# These are simplified versions of the services from Session 1-2.\n# They use in-memory data for workshop simplicity, but the patterns\n# are the same as production systems.\n\nclass VectorDB:\n    \"\"\"\n    Simplified vector search (in-memory for workshop).\n    \n    In production, this would be ChromaDB, Pinecone, or similar.\n    For this workshop, we use simple keyword matching.\n    \"\"\"\n\n    def __init__(self, docs: list):\n        # Index documents by ID for fast lookup\n        self.docs = {d[\"id\"]: d for d in docs}\n\n    def search(self, query: str, top_k: int = 3) -> dict:\n        \"\"\"\n        Simple keyword-based search for workshop.\n        Returns documents matching query terms.\n        \"\"\"\n        query_lower = query.lower()\n        results = []\n\n        for doc in self.docs.values():\n            # Simple relevance scoring based on keyword matches\n            score = 0\n            content_lower = doc[\"content\"].lower()\n            title_lower = doc[\"title\"].lower()\n\n            # Score each query word\n            for word in query_lower.split():\n                if word in content_lower:\n                    score += 1  # Content match\n                if word in title_lower:\n                    score += 2  # Title match (weighted higher)\n\n            if score > 0:\n                results.append({\"doc\": doc, \"score\": score})\n\n        # Sort by score descending (best matches first)\n        results.sort(key=lambda x: x[\"score\"], reverse=True)\n        top_results = results[:top_k]\n\n        # Return in format similar to ChromaDB\n        return {\n            \"documents\": [r[\"doc\"][\"content\"] for r in top_results],\n            \"metadatas\": [{\"title\": r[\"doc\"][\"title\"], \"id\": r[\"doc\"][\"id\"]} for r in top_results],\n            \"distances\": [1.0 / (r[\"score\"] + 1) for r in top_results]  # Lower = better match\n        }\n\n\nclass TeamDB:\n    \"\"\"\n    Team and owner lookup service.\n    \n    Maps services to their owners and team info.\n    \"\"\"\n\n    def __init__(self, data: dict):\n        self.teams = {t[\"id\"]: t for t in data[\"teams\"]}\n        self.owners = data[\"owners\"]\n\n    def find_owner(self, service_or_topic: str) -> dict:\n        \"\"\"\n        Find owner for a service.\n        Returns owner details and their team info.\n        \"\"\"\n        service_lower = service_or_topic.lower()\n\n        # Search through owners to find service match\n        for owner in self.owners:\n            for service in owner[\"services\"]:\n                # Flexible matching: either direction substring match\n                if service_lower in service.lower() or service.lower() in service_lower:\n                    team = self.teams.get(owner[\"team_id\"], {})\n                    return {\n                        \"found\": True,\n                        \"owner\": owner,\n                        \"team\": team\n                    }\n\n        return {\"found\": False, \"owner\": None, \"team\": None}\n\n\nclass StatusAPI:\n    \"\"\"\n    Service status checking API.\n    \n    Returns health status, uptime, and incident info.\n    \"\"\"\n\n    def __init__(self, data: dict):\n        # Index services by name\n        self.services = {s[\"name\"]: s for s in data[\"services\"]}\n\n    def check_status(self, service_name: str) -> dict:\n        \"\"\"\n        Check service status.\n        Returns status, uptime, and any incident details.\n        \"\"\"\n        service_lower = service_name.lower()\n\n        # Exact match first\n        if service_lower in self.services:\n            return {\"found\": True, \"service\": self.services[service_lower]}\n\n        # Partial match (e.g., \"payments\" matches \"payments-api\")\n        for name, service in self.services.items():\n            if service_lower in name or name in service_lower:\n                return {\"found\": True, \"service\": service}\n\n        return {\"found\": False, \"service\": None}\n\n\n# Initialize all services with our loaded data\nvector_db = VectorDB(DOCS_DATA)\nteam_db = TeamDB(TEAMS_DATA)\nstatus_api = StatusAPI(STATUS_DATA)\n\nprint(\"🔧 Services initialized: VectorDB, TeamDB, StatusAPI\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# AGENT: DevHub V4 with Multi-Turn Conversation Support\n# =============================================================================\n#\n# NEW IN V4 (compared to Sessions 1-2):\n# - session_id for grouping related queries\n# - conversation_history for context across turns\n# - INTENTIONAL BUG: Context from previous turns can \"bleed\" into tool selection\n#   This is what we'll learn to debug with Langfuse!\n#\n# =============================================================================\n\nfrom langfuse import observe, get_client\n\nclass DevHubAgentV4:\n    \"\"\"\n    DevHub agent with multi-turn conversation support.\n\n    This version maintains conversation history per session,\n    which enables the \"cancel_order\" bug scenario for debugging practice.\n    \"\"\"\n\n    def __init__(self, vector_db: VectorDB, team_db: TeamDB, status_api: StatusAPI):\n        self.vector_db = vector_db\n        self.team_db = team_db\n        self.status_api = status_api\n        self.client = OpenAI()\n\n        # NEW: Session storage for multi-turn conversations\n        # Key: session_id, Value: list of {user, assistant, tools} dicts\n        self.sessions: dict[str, list] = {}\n\n        # Tool definitions for OpenAI function calling\n        self.tools = [\n            {\n                \"type\": \"function\",\n                \"function\": {\n                    \"name\": \"search_docs\",\n                    \"description\": \"Search documentation for API guides, SDK docs, how-to guides\",\n                    \"parameters\": {\n                        \"type\": \"object\",\n                        \"properties\": {\n                            \"query\": {\"type\": \"string\", \"description\": \"Search query\"}\n                        },\n                        \"required\": [\"query\"]\n                    }\n                }\n            },\n            {\n                \"type\": \"function\",\n                \"function\": {\n                    \"name\": \"find_owner\",\n                    \"description\": \"Find the person or team who owns a service\",\n                    \"parameters\": {\n                        \"type\": \"object\",\n                        \"properties\": {\n                            \"service_name\": {\"type\": \"string\", \"description\": \"Service to find owner for\"}\n                        },\n                        \"required\": [\"service_name\"]\n                    }\n                }\n            },\n            {\n                \"type\": \"function\",\n                \"function\": {\n                    \"name\": \"check_status\",\n                    \"description\": \"Check if a service is healthy, degraded, or down\",\n                    \"parameters\": {\n                        \"type\": \"object\",\n                        \"properties\": {\n                            \"service_name\": {\"type\": \"string\", \"description\": \"Service to check\"}\n                        },\n                        \"required\": [\"service_name\"]\n                    }\n                }\n            }\n        ]\n\n    def _get_system_prompt(self) -> str:\n        \"\"\"System prompt that defines the agent's behavior.\"\"\"\n        return \"\"\"You are DevHub, an AI assistant for developers.\nYou help with:\n- Finding documentation (use search_docs)\n- Finding service owners (use find_owner)\n- Checking service health (use check_status)\n\nBe concise and helpful. Use the appropriate tool for each question.\"\"\"\n\n    def _build_messages(self, user_query: str, session_id: str = None) -> list:\n        \"\"\"\n        Build messages list including conversation history.\n\n        INTENTIONAL BUG: Previous conversation context is included,\n        which can cause the model to be influenced by earlier queries.\n        This is the \"context bleed\" bug we'll debug with Langfuse!\n        \"\"\"\n        messages = []\n\n        # Include conversation history if session exists\n        if session_id and session_id in self.sessions:\n            history = self.sessions[session_id]\n            # Include last 3 turns (THIS IS WHERE CONTEXT BLEED HAPPENS)\n            for turn in history[-3:]:\n                messages.append({\"role\": \"user\", \"content\": turn[\"user\"]})\n                messages.append({\"role\": \"assistant\", \"content\": turn[\"assistant\"]})\n\n        # Add current query\n        messages.append({\"role\": \"user\", \"content\": user_query})\n\n        return messages\n\n    def _execute_tool(self, tool_name: str, args: dict) -> dict:\n        \"\"\"Execute a tool and return results.\"\"\"\n        try:\n            if tool_name == \"search_docs\":\n                result = self.vector_db.search(args.get(\"query\", \"\"))\n                return {\"success\": True, \"data\": result}\n\n            elif tool_name == \"find_owner\":\n                result = self.team_db.find_owner(args.get(\"service_name\", \"\"))\n                return {\"success\": True, \"data\": result}\n\n            elif tool_name == \"check_status\":\n                result = self.status_api.check_status(args.get(\"service_name\", \"\"))\n                return {\"success\": True, \"data\": result}\n\n            else:\n                return {\"success\": False, \"error\": f\"Unknown tool: {tool_name}\"}\n\n        except Exception as e:\n            return {\"success\": False, \"error\": str(e)}\n\n    def query(self, user_query: str, session_id: str = None) -> dict:\n        \"\"\"\n        Process a user query.\n\n        Args:\n            user_query: The user's question\n            session_id: Optional session ID for multi-turn context\n\n        Returns:\n            dict with response, tools_called, and tool_results\n        \"\"\"\n        # Build messages with history (this is where context bleed can happen)\n        messages = self._build_messages(user_query, session_id)\n\n        # Call OpenAI with tools\n        response = self.client.chat.completions.create(\n            model=config.LLM_MODEL,\n            messages=[{\"role\": \"system\", \"content\": self._get_system_prompt()}] + messages,\n            tools=self.tools,\n            tool_choice=\"auto\",\n            max_tokens=config.LLM_MAX_TOKENS,\n            temperature=config.LLM_TEMPERATURE\n        )\n\n        # Process response\n        assistant_message = response.choices[0].message\n        tools_called = []\n        tool_results = []\n\n        # Handle tool calls if any\n        if assistant_message.tool_calls:\n            for tool_call in assistant_message.tool_calls:\n                tool_name = tool_call.function.name\n                tool_args = json.loads(tool_call.function.arguments)\n\n                tools_called.append(tool_name)\n                result = self._execute_tool(tool_name, tool_args)\n                tool_results.append({\n                    \"tool\": tool_name,\n                    \"args\": tool_args,\n                    \"result\": result\n                })\n\n            # Get final response with tool results\n            tool_messages = messages + [assistant_message.model_dump()]\n            for i, tool_call in enumerate(assistant_message.tool_calls):\n                tool_messages.append({\n                    \"role\": \"tool\",\n                    \"tool_call_id\": tool_call.id,\n                    \"content\": json.dumps(tool_results[i][\"result\"])\n                })\n\n            final_response = self.client.chat.completions.create(\n                model=config.LLM_MODEL,\n                messages=[{\"role\": \"system\", \"content\": self._get_system_prompt()}] + tool_messages,\n                max_tokens=config.LLM_MAX_TOKENS\n            )\n\n            response_text = final_response.choices[0].message.content\n        else:\n            response_text = assistant_message.content or \"I couldn't process that request.\"\n\n        # Store in session history for multi-turn support\n        if session_id:\n            if session_id not in self.sessions:\n                self.sessions[session_id] = []\n            self.sessions[session_id].append({\n                \"user\": user_query,\n                \"assistant\": response_text,\n                \"tools\": tools_called\n            })\n\n        return {\n            \"response\": response_text,\n            \"tools_called\": tools_called,\n            \"tool_results\": tool_results\n        }\n\n\n# Initialize the agent with our services\ndevhub = DevHubAgentV4(vector_db, team_db, status_api)\nprint(\"🤖 DevHub V4 initialized with multi-turn support\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# TEST: Verify DevHub is working\n# =============================================================================\n# Quick sanity check to make sure our agent can call tools correctly.\n# We'll test with a simple documentation query.\n\n# Test a simple query (no session_id = no history)\nresult = devhub.query(\"How do I authenticate with the Payments API?\")\n\nprint(\"🧪 Test Query: How do I authenticate with the Payments API?\")\nprint(f\"🔧 Tools called: {result['tools_called']}\")\nprint(f\"📝 Response: {result['response'][:200]}...\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Setup Complete!\n\nYou now have:\n- **Langfuse** connected and verified (LLM observability)\n- **DevHub V4** with multi-turn conversation support\n- **All services loaded:** VectorDB, TeamDB, StatusAPI\n\n**Key point:** DevHub V4 maintains conversation history per session. This is realistic for production agents, but it introduces a subtle bug: **context bleed**.\n\n**Next:** Let's recreate the \"Wrong Tool Mystery\" bug to see why traditional logs aren't enough to debug it.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Topic 1: The Wrong Tool Mystery\n\nLet's recreate the bug that's been frustrating the team, and understand why traditional logs don't help diagnose it.\n\n**The scenario:** A user asks about order cancellation, then asks about order status. The agent keeps calling the wrong tool for the second question.\n\n**Why this matters:** This bug is subtle and common in production LLM applications. Traditional debugging techniques don't help.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## The Cancel Order Bug\n\n![Wrong Tool Mystery](https://raw.githubusercontent.com/axel-sirota/salesforce-ai-workshops/main/exercises/session_04/charts/00_wrong_tool_mystery.svg)\n\n**What the user expects:** Ask about order status → get status check\n\n**What actually happens:** Ask about order status → get owner info (wrong!)\n\nThe diagram above shows the bug: Turn 1 asks about cancellation, Turn 2 asks about status, but the agent calls `find_owner` instead of `check_status`.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# DEMO: Recreate the \"Cancel Order\" Bug\n# =============================================================================\n#\n# This demonstrates the multi-turn context bleed issue.\n# Watch how Turn 1 affects Turn 2's tool selection.\n#\n# The bug: After asking about cancellation in Turn 1, the model sometimes\n# picks the wrong tool for a STATUS query in Turn 2 because \"cancel\" \n# context from Turn 1 bleeds into the decision.\n#\n# =============================================================================\n\n# Create a session for this demo\ndemo_session = f\"{STUDENT_NAME}-demo-bug\"\n\nprint(\"=\" * 60)\nprint(\"TURN 1: User asks about order cancellation\")\nprint(\"=\" * 60)\n\nresponse1 = devhub.query(\n    \"I need to cancel my order #12345. Who should I contact?\",\n    session_id=demo_session\n)\n\nprint(f\"Query: I need to cancel my order #12345. Who should I contact?\")\nprint(f\"Tools called: {response1['tools_called']}\")\nprint(f\"Response: {response1['response']}\")\nprint()\n\nprint(\"=\" * 60)\nprint(\"TURN 2: User asks about STATUS of a DIFFERENT order\")\nprint(\"=\" * 60)\n\nresponse2 = devhub.query(\n    \"What's the status of order #67890?\",\n    session_id=demo_session\n)\n\nprint(f\"Query: What's the status of order #67890?\")\nprint(f\"Tools called: {response2['tools_called']}\")\nprint(f\"Response: {response2['response']}\")\nprint()\n\n# Check if bug occurred\nif \"find_owner\" in response2['tools_called'] and \"check_status\" not in response2['tools_called']:\n    print(\"=\" * 60)\n    print(\"🐛 BUG DETECTED!\")\n    print(\"Turn 2 should have called check_status, but called find_owner instead.\")\n    print(\"The model was confused by 'cancel' context from Turn 1.\")\n    print(\"=\" * 60)\nelif \"check_status\" in response2['tools_called']:\n    print(\"(Bug didn't occur this time - model made correct choice)\")\n    print(\"Run the cell again to potentially see the bug, or we'll force it later\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# TRADITIONAL LOGS: What We Can See\n# =============================================================================\n# This simulates what your typical application logs would show.\n# Notice how they tell you WHAT happened, but not WHY.\n\nprint(\"=\" * 60)\nprint(\"TRADITIONAL APPLICATION LOGS\")\nprint(\"=\" * 60)\nprint()\nprint(\"2024-01-27 10:15:32 INFO  [devhub] query_received\")\nprint(f\"  query=\\\"What's the status of order #67890?\\\"\")\nprint(f\"  session_id=\\\"{demo_session}\\\"\")\nprint()\nprint(\"2024-01-27 10:15:33 INFO  [devhub] tool_called\")\nprint(f\"  tool=\\\"{response2['tools_called'][0] if response2['tools_called'] else 'none'}\\\"\")\nif response2['tool_results']:\n    print(f\"  args={response2['tool_results'][0]['args']}\")\nprint()\nprint(\"2024-01-27 10:15:34 INFO  [devhub] response_sent\")\nprint(f\"  response_length={len(response2['response'])}\")\nprint()\nprint(\"=\" * 60)\nprint(\"❓ WHAT THESE LOGS DON'T TELL US:\")\nprint(\"=\" * 60)\nprint()\nprint(\"  • Why did the model choose this tool?\")\nprint(\"  • What was in the conversation context?\")\nprint(\"  • What was the model's reasoning process?\")\nprint(\"  • Was there something in history that confused it?\")\nprint()\nprint(\"🔍 We're debugging BLIND.\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## The Visibility Gap\n\n| What We Can See | What We Can't See |\n|-----------------|-------------------|\n| Tool name called | WHY that tool was selected |\n| Tool arguments | Model's reasoning process |\n| Response text | Conversation context used |\n| Latency | What influenced the decision |\n\n**Traditional observability** (Jaeger from Session 1) shows us:\n- Service call durations\n- Error propagation\n- Database queries\n\nBut it **cannot** show us:\n- LLM reasoning chains\n- Prompt content at decision time\n- Tool selection logic\n- Context that influenced output\n\n**This is why we need LLM-specific observability.**",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Enter Langfuse: LLM Observability\n\nLangfuse captures what traditional tools miss:\n\n| Langfuse Captures | Why It Matters |\n|-------------------|----------------|\n| **Full prompt** | See exactly what the model received |\n| **Conversation history** | Understand multi-turn context |\n| **Tool selection reasoning** | Know WHY a tool was chosen |\n| **Generation parameters** | Model, temperature, tokens |\n| **Nested spans** | Full execution tree |\n\nIn the next section, you'll add Langfuse to DevHub and see the difference.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Key Insight: See the Reasoning, Not Just the Action\n\n**Without Langfuse:**\n```\nINFO: tool_called=find_owner\n```\n\"The model called find_owner. Why? No idea.\"\n\n**With Langfuse:**\n```\nGeneration: tool_planning\n  Input: {query: \"status of order #67890\", history: [\"cancel order #12345\"]}\n  Output: {tool: \"find_owner\", reasoning: \"User previously discussed order cancellation...\"}\n```\n\"Ah! The model saw 'cancel' in history and assumed this was also about cancellation.\"\n\n**Root cause identified in 30 seconds.**\n\n**Fix:** Add instruction to treat each query independently, or clear irrelevant context.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Section 1 Summary\n\n**The Problem:**\n- Multi-turn conversations can cause \"context bleed\"\n- Model decisions are influenced by previous turns\n- Traditional logs show WHAT but not WHY\n\n**The Solution:**\n- Langfuse captures the full context\n- See conversation history at decision time\n- Understand model reasoning\n\n**Next:** Learn the 5-Layer Failure Framework for systematic debugging.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Topic 2: The 5-Layer LLM Failure Framework\n\nNot all LLM failures are the same. Each layer has different symptoms, causes, and debugging tools.\n\nThis framework lets you diagnose any LLM failure in **~30 seconds**.\n\n**The 5 Layers:**\n1. **Prompt Layer** - Did the model understand the request?\n2. **Retrieval Layer** - Did it get the right context?\n3. **Generation Layer** - Did it hallucinate or extrapolate?\n4. **Validation Layer** - Are the parameters/output correct?\n5. **Latency Layer** - Is there a performance issue?",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## The 5-Layer Framework\n\n![5-Layer Framework](https://raw.githubusercontent.com/axel-sirota/salesforce-ai-workshops/main/exercises/session_04/charts/01_five_layer_framework.svg)\n\nEach layer represents a different failure mode with distinct symptoms and debugging approaches.\n\n**Key insight:** Most LLM bugs fall into one of these 5 categories. Knowing which layer failed tells you where to look.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Layer 1: Prompt Layer\n\n**Symptoms:**\n- Wrong tool selected (like our cancel_order bug)\n- Off-task response (ignores instructions)\n- Conflicting behavior\n\n**Causes:**\n- Unclear instructions in system prompt\n- Ambiguous user query\n- Context from previous turns bleeding in\n- Conflicting directives\n\n**Debug in Langfuse:**\n- Check system prompt content\n- Check conversation history in trace\n- Look at reasoning in tool selection generation\n\n**DevHub Example:**\nTurn 1: \"cancel my order\" → Turn 2: \"order status?\" → Wrong tool\nThe word \"cancel\" from Turn 1 influenced Turn 2's tool selection.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Layer 2: Retrieval Layer\n\n**Symptoms:**\n- \"I don't have information about that\"\n- Irrelevant or incomplete answers\n- Partial information returned\n\n**Causes:**\n- Low recall (relevant docs not retrieved)\n- Low precision (too much noise)\n- Embedding mismatch (query ≠ doc embeddings)\n- Missing documentation\n\n**Debug in Langfuse:**\n- Check `search_docs` span output\n- Look at similarity scores (< 0.5 = problem)\n- Inspect retrieved document content\n- Compare query to what was retrieved\n\n**DevHub Example:**\nQuery: \"How do I implement GraphQL subscriptions?\"\nRetrieved: Generic API docs (no GraphQL content)\nResult: Irrelevant answer because docs don't cover GraphQL.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Layer 3: Generation Layer (Hallucination)\n\n**Symptoms:**\n- Plausible but incorrect facts\n- Invented details not in context\n- Confident wrong answers\n- Made-up API endpoints, function names\n\n**Causes:**\n- Model extrapolates beyond context\n- Model ignores retrieved context\n- Training data patterns override provided context\n\n**Debug in Langfuse:**\n- Compare generation output to retrieval context\n- Check if output claims match source documents\n- Look for details that don't appear in any source\n\n**DevHub Example:**\nRetrieved: \"POST /v1/refunds for processing refunds\"\nResponse: \"Use POST /v2/refunds/batch for batch processing\"\nProblem: /v2/refunds/batch doesn't exist - model invented it!",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Layer 4: Validation Layer\n\n**Symptoms:**\n- JSON parsing errors\n- Schema mismatches\n- Tool call malformed\n- \"Service not found\" errors\n\n**Causes:**\n- Output doesn't match expected schema\n- Wrong parameter names or types\n- Missing required fields\n- Invalid enum values\n\n**Debug in Langfuse:**\n- Check tool call parameters in span\n- Validate against expected schema\n- Look for truncated or malformed output\n\n**DevHub Example:**\nQuery: \"Is the payment system healthy?\"\nTool called: check_status\nParameter: {\"service_name\": \"payment-system\"}\nProblem: Valid services are \"payments-api\", not \"payment-system\"\nResult: \"Service not found\" because of naming mismatch.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Layer 5: Latency Layer\n\n**Symptoms:**\n- Timeouts\n- Slow responses\n- Incomplete responses (truncated)\n- Cascading failures\n\n**Causes:**\n- Slow database queries\n- Rate limiting\n- Cold starts\n- Network issues\n\n**Debug in Jaeger (Session 1), not Langfuse:**\n- Check span durations\n- Identify bottleneck service\n- Look for timeout errors\n- Check retry patterns\n\n**DevHub Example:**\nVectorDB slow query (from Session 1) - 3 second latency spike.\nThis is infrastructure, not LLM reasoning - use **Jaeger** for this layer.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## The 30-Second Decision Tree\n\n![Debug Decision Tree](https://raw.githubusercontent.com/axel-sirota/salesforce-ai-workshops/main/exercises/session_04/charts/03_debug_decision_tree.svg)\n\nUse this flowchart to quickly identify which layer failed. Start at the top and follow the branches based on what you observe.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## 30-Second Triage Process\n\n```\nUser reports: \"Something is wrong with the AI response\"\n\nSTEP 1: Is there an error/timeout?\n├── YES → LAYER 5 (Latency) → Check Jaeger spans\n└── NO → Continue\n\nSTEP 2: Did the right tool get called?\n├── NO → LAYER 1 (Prompt) → Check Langfuse reasoning\n└── YES → Continue\n\nSTEP 3: Were tool parameters correct?\n├── NO → LAYER 4 (Validation) → Check tool call args\n└── YES → Continue\n\nSTEP 4: Did retrieval return good context?\n├── NO (similarity < 0.5) → LAYER 2 (Retrieval)\n└── YES → Continue\n\nSTEP 5: Does output match context?\n├── NO → LAYER 3 (Generation/Hallucination)\n└── YES → Response is correct ✓\n\nTime to identify failure layer: ~30 seconds\n```\n\n**Memorize this flow!** It will save you hours of debugging.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## 5-Layer Framework Summary\n\n| Layer | Key Question | Debug Tool |\n|-------|--------------|------------|\n| **1. Prompt** | Did it pick the right tool? | Langfuse: reasoning |\n| **2. Retrieval** | Did it get good context? | Langfuse: similarity scores |\n| **3. Generation** | Did it hallucinate? | Langfuse: compare output vs context |\n| **4. Validation** | Are parameters correct? | Langfuse: tool call args |\n| **5. Latency** | Is it slow/timing out? | Jaeger: span durations |\n\n**Remember:**\n- Layers 1-4: Use **Langfuse** (LLM-specific observability)\n- Layer 5: Use **Jaeger** (infrastructure observability)\n\n**Next:** Add Langfuse to DevHub and see these layers in action.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Lab 1: Add Langfuse Observability to DevHub\n\n**Duration:** ~25 minutes\n\n## What You'll Do\n\n1. Initialize Langfuse client\n2. Add `@observe()` decorator to `query()` method\n3. Capture tool execution as spans\n4. Set session_id for multi-turn grouping\n5. Verify traces in Langfuse UI\n\n## Key Langfuse v3 Concepts\n\n| Concept | Description |\n|---------|-------------|\n| **Trace** | Top-level container for a request |\n| **Span** | A unit of work within a trace |\n| **Generation** | An LLM call (special type of span) |\n| **Session** | Groups related traces together |",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Langfuse Trace Model\n\n![Langfuse Trace Model](https://raw.githubusercontent.com/axel-sirota/salesforce-ai-workshops/main/exercises/session_04/charts/02_langfuse_trace_model.svg)\n\n**Hierarchy:**\n- **Session** contains multiple **Traces** (one per user message)\n- **Trace** contains multiple **Spans** (processing steps)\n- **Generation** is a special span for LLM calls\n\nThis nested structure lets you drill down from high-level sessions to individual LLM calls.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# LAB 1, TASK 1: Initialize Langfuse Client\n# =============================================================================\n#\n# GOAL: Set up Langfuse for LLM observability\n# TIME: ~3 minutes\n#\n# LANGFUSE v3 API:\n#   - Use get_client() to get the singleton client\n#   - Environment variables are read automatically\n#   - No explicit initialization needed if env vars are set\n#\n# =============================================================================\n\nfrom langfuse import observe, get_client\nimport uuid\n\n# Get the Langfuse client (uses env vars we set earlier)\n# This is idempotent - safe to run multiple times\nlangfuse = get_client()\n\n# Create a unique session ID for this lab\nLAB_SESSION_ID = f\"{STUDENT_NAME}-lab1-{uuid.uuid4().hex[:8]}\"\n\nprint(f\"✅ Langfuse client ready!\")\nprint(f\"📋 Lab Session ID: {LAB_SESSION_ID}\")\nprint(f\"🔗 View traces at: {LANGFUSE_HOST}\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Task 2: Instrument the Query Method\n\nNow we'll create an instrumented version of DevHub that captures:\n- The full query lifecycle\n- Tool selection and execution\n- Session context for multi-turn\n\n**Key Langfuse v3 Patterns:**\n\n```python\n# Decorator for automatic tracing\n@observe()\ndef my_function():\n    ...\n\n# Update trace metadata\nlangfuse = get_client()\nlangfuse.update_current_trace(\n    session_id=\"...\",\n    user_id=\"...\",\n    input=\"...\",\n    output=\"...\"\n)\n\n# Create nested spans\nwith langfuse.start_as_current_span(name=\"my-span\") as span:\n    span.update(input={...}, output={...})\n```",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# LAB 1, TASK 2: Create Instrumented DevHub\n# =============================================================================\n#\n# GOAL: Add Langfuse observability to see LLM reasoning\n# TIME: ~10 minutes\n#\n# You'll implement:\n#   1. @observe() decorator on query()\n#   2. update_current_trace() for session/user metadata\n#   3. Nested spans for tool execution\n#\n# =============================================================================\n\nfrom langfuse import observe, get_client\nfrom openai import OpenAI\nimport json\n\nclass DevHubWithLangfuse:\n    \"\"\"\n    DevHub with Langfuse observability.\n\n    This version captures:\n    - Full query traces with session grouping\n    - Tool selection and reasoning\n    - Tool execution results\n    \"\"\"\n\n    def __init__(self, vector_db: VectorDB, team_db: TeamDB, status_api: StatusAPI):\n        self.vector_db = vector_db\n        self.team_db = team_db\n        self.status_api = status_api\n        self.client = OpenAI()\n        self.sessions: dict[str, list] = {}\n\n        # Same tools as before\n        self.tools = [\n            {\n                \"type\": \"function\",\n                \"function\": {\n                    \"name\": \"search_docs\",\n                    \"description\": \"Search documentation for API guides, SDK docs, how-to guides\",\n                    \"parameters\": {\n                        \"type\": \"object\",\n                        \"properties\": {\n                            \"query\": {\"type\": \"string\", \"description\": \"Search query\"}\n                        },\n                        \"required\": [\"query\"]\n                    }\n                }\n            },\n            {\n                \"type\": \"function\",\n                \"function\": {\n                    \"name\": \"find_owner\",\n                    \"description\": \"Find the person or team who owns a service\",\n                    \"parameters\": {\n                        \"type\": \"object\",\n                        \"properties\": {\n                            \"service_name\": {\"type\": \"string\", \"description\": \"Service to find owner for\"}\n                        },\n                        \"required\": [\"service_name\"]\n                    }\n                }\n            },\n            {\n                \"type\": \"function\",\n                \"function\": {\n                    \"name\": \"check_status\",\n                    \"description\": \"Check if a service is healthy, degraded, or down\",\n                    \"parameters\": {\n                        \"type\": \"object\",\n                        \"properties\": {\n                            \"service_name\": {\"type\": \"string\", \"description\": \"Service to check\"}\n                        },\n                        \"required\": [\"service_name\"]\n                    }\n                }\n            }\n        ]\n\n    def _get_system_prompt(self) -> str:\n        return \"\"\"You are DevHub, an AI assistant for developers.\nYou help with:\n- Finding documentation (use search_docs)\n- Finding service owners (use find_owner)\n- Checking service health (use check_status)\n\nBe concise and helpful. Use the appropriate tool for each question.\"\"\"\n\n    def _build_messages(self, user_query: str, session_id: str = None) -> list:\n        \"\"\"Build messages with conversation history.\"\"\"\n        messages = []\n\n        if session_id and session_id in self.sessions:\n            for turn in self.sessions[session_id][-3:]:\n                messages.append({\"role\": \"user\", \"content\": turn[\"user\"]})\n                messages.append({\"role\": \"assistant\", \"content\": turn[\"assistant\"]})\n\n        messages.append({\"role\": \"user\", \"content\": user_query})\n        return messages\n\n    # =========================================================================\n    # LANGFUSE INSTRUMENTATION: Add @observe() decorator\n    # =========================================================================\n\n    @observe()  # <-- THIS DECORATOR CREATES A TRACE\n    def query(self, user_query: str, session_id: str = None) -> dict:\n        \"\"\"\n        Process a user query with Langfuse tracing.\n        \"\"\"\n        # ─────────────────────────────────────────────────────────────────────\n        # TASK 2A: Update trace with session and user metadata\n        # ─────────────────────────────────────────────────────────────────────\n        langfuse = get_client()\n        langfuse.update_current_trace(\n            session_id=session_id or LAB_SESSION_ID,\n            user_id=STUDENT_NAME,\n            input=user_query,\n            metadata={\n                \"devhub_version\": \"v4-langfuse\",\n                \"has_history\": session_id in self.sessions if session_id else False\n            }\n        )\n        # ─────────────────────────────────────────────────────────────────────\n\n        # Build messages with history\n        messages = self._build_messages(user_query, session_id)\n\n        # ─────────────────────────────────────────────────────────────────────\n        # TASK 2B: Wrap LLM call in a span to capture tool planning\n        # ─────────────────────────────────────────────────────────────────────\n        with langfuse.start_as_current_span(\n            name=\"tool-planning\",\n            input={\"query\": user_query, \"history_length\": len(messages) - 1}\n        ) as planning_span:\n\n            response = self.client.chat.completions.create(\n                model=config.LLM_MODEL,\n                messages=[{\"role\": \"system\", \"content\": self._get_system_prompt()}] + messages,\n                tools=self.tools,\n                tool_choice=\"auto\",\n                max_tokens=config.LLM_MAX_TOKENS,\n                temperature=config.LLM_TEMPERATURE\n            )\n\n            assistant_message = response.choices[0].message\n            tools_to_call = []\n\n            if assistant_message.tool_calls:\n                tools_to_call = [\n                    {\"name\": tc.function.name, \"args\": json.loads(tc.function.arguments)}\n                    for tc in assistant_message.tool_calls\n                ]\n\n            planning_span.update(\n                output={\n                    \"tools_selected\": [t[\"name\"] for t in tools_to_call],\n                    \"tool_calls\": tools_to_call\n                },\n                metadata={\"model\": config.LLM_MODEL}\n            )\n        # ─────────────────────────────────────────────────────────────────────\n\n        # Execute tools\n        tools_called = []\n        tool_results = []\n\n        if assistant_message.tool_calls:\n            for tool_call in assistant_message.tool_calls:\n                tool_name = tool_call.function.name\n                tool_args = json.loads(tool_call.function.arguments)\n\n                # ─────────────────────────────────────────────────────────────\n                # TASK 2C: Wrap each tool execution in a span\n                # ─────────────────────────────────────────────────────────────\n                with langfuse.start_as_current_span(\n                    name=f\"tool.{tool_name}\",\n                    input=tool_args\n                ) as tool_span:\n\n                    result = self._execute_tool(tool_name, tool_args)\n\n                    tool_span.update(\n                        output=result,\n                        metadata={\"tool\": tool_name}\n                    )\n                # ─────────────────────────────────────────────────────────────\n\n                tools_called.append(tool_name)\n                tool_results.append({\n                    \"tool\": tool_name,\n                    \"args\": tool_args,\n                    \"result\": result\n                })\n\n            # Generate final response\n            tool_messages = messages + [assistant_message.model_dump()]\n            for i, tool_call in enumerate(assistant_message.tool_calls):\n                tool_messages.append({\n                    \"role\": \"tool\",\n                    \"tool_call_id\": tool_call.id,\n                    \"content\": json.dumps(tool_results[i][\"result\"])\n                })\n\n            # ─────────────────────────────────────────────────────────────────\n            # TASK 2D: Wrap response synthesis in a span\n            # ─────────────────────────────────────────────────────────────────\n            with langfuse.start_as_current_span(\n                name=\"response-synthesis\",\n                input={\"tools_used\": tools_called}\n            ) as synth_span:\n\n                final_response = self.client.chat.completions.create(\n                    model=config.LLM_MODEL,\n                    messages=[{\"role\": \"system\", \"content\": self._get_system_prompt()}] + tool_messages,\n                    max_tokens=config.LLM_MAX_TOKENS\n                )\n\n                response_text = final_response.choices[0].message.content\n\n                synth_span.update(\n                    output=response_text,\n                    metadata={\"model\": config.LLM_MODEL}\n                )\n            # ─────────────────────────────────────────────────────────────────\n        else:\n            response_text = assistant_message.content or \"I couldn't process that request.\"\n\n        # Store in session\n        if session_id:\n            if session_id not in self.sessions:\n                self.sessions[session_id] = []\n            self.sessions[session_id].append({\n                \"user\": user_query,\n                \"assistant\": response_text,\n                \"tools\": tools_called\n            })\n\n        # ─────────────────────────────────────────────────────────────────────\n        # TASK 2E: Update trace with final output\n        # ─────────────────────────────────────────────────────────────────────\n        langfuse.update_current_trace(\n            output=response_text\n        )\n        # ─────────────────────────────────────────────────────────────────────\n\n        return {\n            \"response\": response_text,\n            \"tools_called\": tools_called,\n            \"tool_results\": tool_results\n        }\n\n    def _execute_tool(self, tool_name: str, args: dict) -> dict:\n        \"\"\"Execute a tool and return results.\"\"\"\n        try:\n            if tool_name == \"search_docs\":\n                result = self.vector_db.search(args.get(\"query\", \"\"))\n                return {\"success\": True, \"data\": result}\n            elif tool_name == \"find_owner\":\n                result = self.team_db.find_owner(args.get(\"service_name\", \"\"))\n                return {\"success\": True, \"data\": result}\n            elif tool_name == \"check_status\":\n                result = self.status_api.check_status(args.get(\"service_name\", \"\"))\n                return {\"success\": True, \"data\": result}\n            else:\n                return {\"success\": False, \"error\": f\"Unknown tool: {tool_name}\"}\n        except Exception as e:\n            return {\"success\": False, \"error\": str(e)}\n\n\n# Create instrumented DevHub\ndevhub_traced = DevHubWithLangfuse(vector_db, team_db, status_api)\nprint(\"🔍 DevHub with Langfuse instrumentation created!\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# LAB 1, TASK 3: Test Your Instrumentation\n# =============================================================================\n#\n# Run test queries and verify traces appear in Langfuse\n#\n# =============================================================================\n\nprint(\"Testing instrumented DevHub...\")\nprint(\"=\" * 60)\n\n# Test 1: Documentation query\nprint(\"\\n📚 Test 1: Documentation query\")\nresult1 = devhub_traced.query(\n    \"How do I authenticate with the Payments API?\",\n    session_id=LAB_SESSION_ID\n)\nprint(f\"Tools: {result1['tools_called']}\")\nprint(f\"Response: {result1['response'][:150]}...\")\n\n# Test 2: Owner query\nprint(\"\\n👤 Test 2: Owner query\")\nresult2 = devhub_traced.query(\n    \"Who owns the billing service?\",\n    session_id=LAB_SESSION_ID\n)\nprint(f\"Tools: {result2['tools_called']}\")\nprint(f\"Response: {result2['response'][:150]}...\")\n\n# Test 3: Status query\nprint(\"\\n🔧 Test 3: Status query\")\nresult3 = devhub_traced.query(\n    \"Is the staging environment working?\",\n    session_id=LAB_SESSION_ID\n)\nprint(f\"Tools: {result3['tools_called']}\")\nprint(f\"Response: {result3['response'][:150]}...\")\n\n# IMPORTANT: Flush traces to Langfuse\nlangfuse = get_client()\nlangfuse.flush()\n\nprint(\"\\n\" + \"=\" * 60)\nprint(\"✅ TRACES SENT TO LANGFUSE!\")\nprint(\"=\" * 60)\nprint(f\"\\n🔗 View your traces at: {LANGFUSE_HOST}\")\nprint(f\"🔍 Filter by session: {LAB_SESSION_ID}\")\nprint(\"\\nYou should see 3 traces, each with nested spans:\")\nprint(\"  - tool-planning\")\nprint(\"  - tool.<name>\")\nprint(\"  - response-synthesis\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Lab 1 Verification Checklist\n\nOpen Langfuse UI and verify:\n\n### Step 1: Find Your Session\n- Go to Langfuse UI\n- Click \"Traces\" in sidebar\n- Filter by Session ID: `{LAB_SESSION_ID}`\n\n### Step 2: Verify Trace Structure\nFor each of the 3 traces, check:\n\n- [ ] **Trace level:** Shows input query and output response\n- [ ] **tool-planning span:** Shows tools selected\n- [ ] **tool.* span:** Shows tool args and result\n- [ ] **response-synthesis span:** Shows final response generation\n\n### Step 3: Verify Metadata\n- [ ] session_id is set correctly\n- [ ] user_id shows your student name\n- [ ] metadata includes devhub_version\n\n### Step 4: Check Token Usage (Bonus)\n- Click on a generation span\n- Look for token counts (if captured by OpenAI integration)\n\n**If something is missing, check:**\n1. Did you call `langfuse.flush()`?\n2. Are environment variables set correctly?\n3. Is the @observe() decorator on the query method?",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# LAB 1, TASK 4: Test Multi-Turn Session\n# =============================================================================\n#\n# This recreates the \"cancel_order\" bug with tracing\n# Now we can SEE why the bug happens!\n#\n# =============================================================================\n\n# Create a new session for the multi-turn test\nmulti_turn_session = f\"{STUDENT_NAME}-multiturn-{uuid.uuid4().hex[:8]}\"\n\nprint(\"🔄 MULTI-TURN TEST: The Cancel Order Bug\")\nprint(\"=\" * 60)\n\n# Turn 1: Cancellation query\nprint(\"\\n📞 Turn 1: Ask about cancellation\")\nturn1 = devhub_traced.query(\n    \"I need to cancel my subscription. Who handles that?\",\n    session_id=multi_turn_session\n)\nprint(f\"Tools: {turn1['tools_called']}\")\nprint(f\"Response: {turn1['response'][:150]}...\")\n\n# Turn 2: Status query (should trigger different tool)\nprint(\"\\n📊 Turn 2: Ask about service status\")\nturn2 = devhub_traced.query(\n    \"Is the payments API healthy right now?\",\n    session_id=multi_turn_session\n)\nprint(f\"Tools: {turn2['tools_called']}\")\nprint(f\"Response: {turn2['response'][:150]}...\")\n\n# Flush\nlangfuse = get_client()\nlangfuse.flush()\n\nprint(\"\\n\" + \"=\" * 60)\nprint(f\"🔗 View session at: {LANGFUSE_HOST}\")\nprint(f\"📋 Session ID: {multi_turn_session}\")\nprint(\"=\" * 60)\n\n# Analysis\nif \"check_status\" in turn2['tools_called']:\n    print(\"\\n✅ Correct behavior: check_status was called for Turn 2\")\nelse:\n    print(\"\\n🐛 BUG DETECTED: check_status should have been called\")\n    print(\"Look at the 'tool-planning' span in Turn 2 to see WHY\")\n    print(\"The conversation history influenced the tool selection!\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Multi-Turn Session in Langfuse\n\n![Multi-Turn Session](https://raw.githubusercontent.com/axel-sirota/salesforce-ai-workshops/main/exercises/session_04/charts/04_multi_turn_session.svg)\n\n**What to look for in Langfuse:**\n\n1. **Session view:** Both traces grouped together\n2. **Turn 1 tool-planning:** Shows why find_owner was selected\n3. **Turn 2 tool-planning:** Check if history influenced selection\n4. **Input field:** Should show conversation history was included\n\n**The debugging insight:**\nIf Turn 2 selected the wrong tool, the `tool-planning` span will show\nthe conversation history that was passed to the model, revealing WHY\nthe context from Turn 1 affected the decision.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Lab 1 Complete!\n\nYou've successfully added Langfuse observability to DevHub.\n\n### What You Built\n\n| Component | Purpose |\n|-----------|---------|\n| `@observe()` decorator | Automatic trace creation |\n| `update_current_trace()` | Session and user metadata |\n| `start_as_current_span()` | Tool execution tracking |\n| Multi-turn session | Context visibility |\n\n### Key Takeaways\n\n1. **Langfuse v3** uses `get_client()` pattern (not langfuse_context)\n2. **Spans nest automatically** when created within decorated functions\n3. **session_id groups traces** for multi-turn analysis\n4. **Always call flush()** in notebooks/short-lived environments\n\n### Next: Demo - Trace Replay Workflow",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Demo: Trace Replay Workflow\n\n**Instructor demonstrates:** How to export a trace and replay it for debugging.\n\nWatch how we:\n1. Find a problematic trace in Langfuse\n2. Export trace data via API\n3. Replay with modified prompt\n4. Compare results\n\nThis workflow is how you'll debug production issues systematically.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# DEMO: Export and Replay a Trace\n# =============================================================================\n#\n# This shows how to programmatically access traces for debugging.\n# In production, you'd use this to:\n# - Export failing traces\n# - Replay with modified prompts\n# - Test fixes before deploying\n#\n# =============================================================================\n\nfrom langfuse import get_client\n\nlangfuse = get_client()\n\nprint(\"📋 Trace Replay Workflow:\")\nprint(\"=\" * 60)\nprint()\nprint(\"1. FIND: In Langfuse UI, find problematic trace\")\nprint(\"   - Filter by session_id or time range\")\nprint(\"   - Look for traces with wrong tool selection\")\nprint()\nprint(\"2. EXPORT: Get trace data via API\")\nprint(\"   trace = langfuse.api.trace.get('trace-id')\")\nprint()\nprint(\"3. INSPECT: Check the tool-planning span\")\nprint(\"   observations = langfuse.api.observations_v_2.get_many(\")\nprint(\"       trace_id='trace-id',\")\nprint(\"       type='SPAN'\")\nprint(\"   )\")\nprint()\nprint(\"4. REPLAY: Run same query with modified prompt\")\nprint(\"   # Add instruction to ignore history\")\nprint(\"   new_prompt = original_prompt + '\\\\nTreat each query independently.'\")\nprint()\nprint(\"5. COMPARE: Check if fix works\")\nprint(\"   # If new response is correct, you've found the fix!\")\nprint()\nprint(\"=\" * 60)\nprint(\"💡 This is how you turn trace analysis into actionable fixes.\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Lab 2: Debug 4 Failure Scenarios\n\n**Duration:** ~35 minutes\n\nApply the 5-Layer Framework to diagnose real failures:\n\n| Scenario | Layer | Time |\n|----------|-------|------|\n| 1. Context Bleed | Prompt | 10 min |\n| 2. Low Quality Retrieval | Retrieval | 10 min |\n| 3. Hallucination | Generation | 10 min |\n| 4. Parameter Error | Validation | 5 min |\n\nFor each scenario:\n1. Run the failing query\n2. Find the trace in Langfuse\n3. Identify which layer failed\n4. Answer analysis questions\n5. Propose a fix",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Scenario 1: Context Bleed (Prompt Layer)\n\n![Context Bleed](https://raw.githubusercontent.com/axel-sirota/salesforce-ai-workshops/main/exercises/session_04/charts/05_context_bleed_scenario.svg)\n\n**The Bug:** Previous conversation context causes wrong tool selection.\n\n**Layer:** Prompt Layer\n\n**Your task:** Run the scenario, find the trace, and identify how Turn 1 affected Turn 2.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SCENARIO 1: Context Bleed (Prompt Layer)\n# =============================================================================\n#\n# This recreates the cancel_order bug for you to debug.\n#\n# =============================================================================\n\nscenario1_session = f\"{STUDENT_NAME}-scenario1-{uuid.uuid4().hex[:8]}\"\n\nprint(\"🐛 SCENARIO 1: Context Bleed\")\nprint(\"=\" * 60)\n\n# Turn 1: Create context about cancellation\nprint(\"\\n📞 Turn 1: Ask about cancellation\")\ns1_turn1 = devhub_traced.query(\n    \"I want to cancel my order #12345. Who do I contact?\",\n    session_id=scenario1_session\n)\nprint(f\"Tools: {s1_turn1['tools_called']}\")\nprint(f\"Response: {s1_turn1['response'][:150]}...\")\n\n# Turn 2: Ask about STATUS (different intent!)\nprint(\"\\n📊 Turn 2: Ask about order STATUS\")\ns1_turn2 = devhub_traced.query(\n    \"What's the current status of order #67890?\",\n    session_id=scenario1_session\n)\nprint(f\"Tools: {s1_turn2['tools_called']}\")\nprint(f\"Response: {s1_turn2['response'][:150]}...\")\n\n# Flush\nlangfuse = get_client()\nlangfuse.flush()\n\nprint(\"\\n\" + \"=\" * 60)\nprint(f\"🔗 Debug in Langfuse: {LANGFUSE_HOST}\")\nprint(f\"📋 Session: {scenario1_session}\")\nprint(\"=\" * 60)",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Scenario 1 Analysis Worksheet\n\nAnswer these questions by examining the Langfuse traces:\n\n**1. What tool was selected for Turn 2?**\n\nYour answer: _________________________________\n\n**2. What tool SHOULD have been selected?**\n\nYour answer: _________________________________\n\n**3. Find the \"tool-planning\" span for Turn 2. What does the input show about conversation history?**\n\nYour answer: _________________________________\n\n**4. How did Turn 1's content influence Turn 2's tool selection?**\n\nYour answer: _________________________________\n\n**5. Proposed fix (choose one or more):**\n- [ ] Clear conversation history between unrelated queries\n- [ ] Add system prompt instruction: \"Treat each query independently\"\n- [ ] Add intent classification before tool selection\n- [ ] Other: _________________________________",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SCENARIO 1: Expected Answers (Don't peek until you've tried!)\n# =============================================================================\n\nprint(\"\"\"\n📋 SCENARIO 1 EXPECTED ANSWERS:\n\n1. Tool selected for Turn 2: find_owner (likely, if bug occurred)\n\n2. Correct tool: check_status (asking about order STATUS)\n\n3. tool-planning input shows:\n   - history_length > 0\n   - Previous query about \"cancel\" is in context\n\n4. Influence: The word \"cancel\" from Turn 1 made the model think\n   Turn 2 was also about cancellation, so it selected find_owner\n   to help with the cancellation process instead of checking status.\n\n5. Best fix: Add system prompt instruction:\n   \"Evaluate each query on its own merit. Previous conversation\n   provides context but should not override the current query's intent.\"\n\"\"\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Scenario 2: Retrieval Failure (Retrieval Layer)\n\n**The Bug:** Query about a topic with no good documentation.\n\n**Layer:** Retrieval Layer\n\n**Your task:** Run the scenario, check the search results in Langfuse, and identify the retrieval gap.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SCENARIO 2: Retrieval Failure (Retrieval Layer)\n# =============================================================================\n#\n# Query about a topic with no good documentation.\n# The model has to work with poor/no context.\n#\n# =============================================================================\n\nscenario2_session = f\"{STUDENT_NAME}-scenario2-{uuid.uuid4().hex[:8]}\"\n\nprint(\"🐛 SCENARIO 2: Retrieval Failure\")\nprint(\"=\" * 60)\n\n# Query about something not in our docs\ns2_result = devhub_traced.query(\n    \"How do I implement GraphQL subscriptions with your API?\",\n    session_id=scenario2_session\n)\n\nprint(f\"Query: How do I implement GraphQL subscriptions with your API?\")\nprint(f\"Tools: {s2_result['tools_called']}\")\nprint(f\"Response: {s2_result['response']}\")\n\n# Flush\nlangfuse = get_client()\nlangfuse.flush()\n\nprint(\"\\n\" + \"=\" * 60)\nprint(f\"🔗 Debug in Langfuse: {LANGFUSE_HOST}\")\nprint(f\"📋 Session: {scenario2_session}\")\nprint(\"=\" * 60)\nprint(\"\\n📋 ANALYSIS TASK:\")\nprint(\"Look at the tool.search_docs span output!\")\nprint(\"Check what documents were retrieved and their similarity scores.\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Scenario 3: Hallucination (Generation Layer)\n\n**The Bug:** The model invents details not in the retrieved context.\n\n**Layer:** Generation Layer\n\n**Your task:** Compare the response to the retrieved documents. Did the model make things up?",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SCENARIO 3: Hallucination (Generation Layer)\n# =============================================================================\n#\n# The model invents details not in the retrieved context.\n# This is a common and dangerous failure mode.\n#\n# =============================================================================\n\nscenario3_session = f\"{STUDENT_NAME}-scenario3-{uuid.uuid4().hex[:8]}\"\n\nprint(\"🐛 SCENARIO 3: Hallucination\")\nprint(\"=\" * 60)\n\n# Query that might cause hallucination\ns3_result = devhub_traced.query(\n    \"What's the API endpoint for processing batch refunds?\",\n    session_id=scenario3_session\n)\n\nprint(f\"Query: What's the API endpoint for processing batch refunds?\")\nprint(f\"Tools: {s3_result['tools_called']}\")\nprint(f\"Response: {s3_result['response']}\")\n\n# Flush\nlangfuse = get_client()\nlangfuse.flush()\n\nprint(\"\\n\" + \"=\" * 60)\nprint(f\"🔗 Debug in Langfuse: {LANGFUSE_HOST}\")\nprint(f\"📋 Session: {scenario3_session}\")\nprint(\"=\" * 60)\nprint(\"\\n📋 ANALYSIS TASK:\")\nprint(\"1. Look at tool.search_docs span output (retrieved docs)\")\nprint(\"2. Look at response-synthesis span output (final response)\")\nprint(\"3. Does the response mention endpoints NOT in the docs?\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Scenario 4: Parameter Error (Validation Layer)\n\n**The Bug:** The model calls the right tool with wrong parameters.\n\n**Layer:** Validation Layer\n\n**Your task:** Check if the service name parameter matches any valid service.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SCENARIO 4: Parameter Error (Validation Layer)\n# =============================================================================\n#\n# The model calls the right tool with wrong parameters.\n# Example: service name doesn't match valid options.\n#\n# =============================================================================\n\nscenario4_session = f\"{STUDENT_NAME}-scenario4-{uuid.uuid4().hex[:8]}\"\n\nprint(\"🐛 SCENARIO 4: Parameter Error\")\nprint(\"=\" * 60)\n\n# Query with ambiguous service name\ns4_result = devhub_traced.query(\n    \"Is the payment system healthy?\",\n    session_id=scenario4_session\n)\n\nprint(f\"Query: Is the payment system healthy?\")\nprint(f\"Tools: {s4_result['tools_called']}\")\nprint(f\"Response: {s4_result['response']}\")\n\n# Check tool results\nif s4_result['tool_results']:\n    for tr in s4_result['tool_results']:\n        print(f\"\\n🔧 Tool: {tr['tool']}\")\n        print(f\"📥 Args: {tr['args']}\")\n        print(f\"✓ Result found: {tr['result'].get('data', {}).get('found', 'N/A')}\")\n\n# Flush\nlangfuse = get_client()\nlangfuse.flush()\n\nprint(\"\\n\" + \"=\" * 60)\nprint(f\"🔗 Debug in Langfuse: {LANGFUSE_HOST}\")\nprint(f\"📋 Session: {scenario4_session}\")\nprint(\"=\" * 60)\nprint(\"\\n📋 ANALYSIS TASK:\")\nprint(\"1. Was check_status called? (correct tool)\")\nprint(\"2. What service_name parameter was passed?\")\nprint(\"3. Valid services are: payments-api, auth-service, staging, vector-search, api-gateway\")\nprint(\"4. Did the parameter match a valid service?\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Lab 2 Complete!\n\nYou've applied the 5-Layer Framework to 4 different failure types:\n\n| Scenario | Layer | Root Cause | Fix |\n|----------|-------|------------|-----|\n| Context Bleed | Prompt | History influenced decision | Clearer instructions |\n| Low Retrieval | Retrieval | No matching docs | Add docs or acknowledge gaps |\n| Hallucination | Generation | Model invented details | Constrain to context only |\n| Parameter Error | Validation | Wrong param value | Validate before calling |\n\n### Key Insight\n\n**Every failure has a visible trace.** Langfuse lets you see:\n- What context the model had\n- What decision it made\n- Why it made that decision\n\n**Next:** Convert a failure into a regression test.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Lab 3: Convert Failures to Regression Tests\n\n**Duration:** ~15 minutes\n\nThe full debugging loop:\n\n![Failure to Test Pipeline](https://raw.githubusercontent.com/axel-sirota/salesforce-ai-workshops/main/exercises/session_04/charts/06_failure_to_test_pipeline.svg)\n\n**Goal:** Ensure the hallucination bug (Scenario 3) never happens again.\n\n**The Pipeline:**\n1. **Find** failing trace in Langfuse\n2. **Analyze** with 5-Layer Framework\n3. **Export** trace data (query, response, context)\n4. **Test** with DeepEval FaithfulnessMetric\n5. **CI/CD** - Add to regression test suite",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# LAB 3: Convert Scenario 3 (Hallucination) to Regression Test\n# =============================================================================\n#\n# We'll use DeepEval's FaithfulnessMetric to catch hallucinations.\n# This connects to what you learned in Session 2!\n#\n# =============================================================================\n\nfrom deepeval.test_case import LLMTestCase\nfrom deepeval.metrics import FaithfulnessMetric\nfrom deepeval import evaluate\n\n# Recreate the scenario\nprint(\"📋 Step 1: Recreate the hallucination scenario\")\nprint(\"=\" * 60)\n\ntest_query = \"What's the API endpoint for processing batch refunds?\"\ntest_result = devhub_traced.query(test_query, session_id=f\"{STUDENT_NAME}-lab3-test\")\n\n# Get the retrieved context\nretrieved_context = []\nfor tr in test_result['tool_results']:\n    if tr['tool'] == 'search_docs':\n        docs = tr['result'].get('data', {}).get('documents', [])\n        retrieved_context.extend(docs)\n\nprint(f\"Query: {test_query}\")\nprint(f\"Response: {test_result['response']}\")\nprint(f\"Retrieved context ({len(retrieved_context)} docs):\")\nfor i, doc in enumerate(retrieved_context[:2]):\n    print(f\"  {i+1}. {doc[:100]}...\")\n\n# Flush traces\nlangfuse = get_client()\nlangfuse.flush()",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# Step 2: Create DeepEval Test Case\n# =============================================================================\n#\n# LLMTestCase requires: input, actual_output, retrieval_context\n# This is the same pattern from Session 2!\n#\n# =============================================================================\n\nprint(\"\\n📋 Step 2: Create test case for faithfulness check\")\nprint(\"=\" * 60)\n\n# Create test case\ntest_case = LLMTestCase(\n    input=test_query,\n    actual_output=test_result['response'],\n    retrieval_context=retrieved_context if retrieved_context else [\"No documentation found for batch refunds.\"]\n)\n\nprint(f\"Test Case Created:\")\nprint(f\"  Input: {test_case.input}\")\nprint(f\"  Output: {test_case.actual_output[:100]}...\")\nprint(f\"  Context: {len(test_case.retrieval_context)} documents\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# Step 3: Run FaithfulnessMetric\n# =============================================================================\n#\n# FaithfulnessMetric checks if the output is grounded in the context.\n# Score < threshold means hallucination detected!\n#\n# =============================================================================\n\nprint(\"\\n📋 Step 3: Evaluate faithfulness\")\nprint(\"=\" * 60)\n\n# Create faithfulness metric\n# DeepEval 3.x: model defaults to gpt-4.1, threshold is the pass/fail line\nfaithfulness = FaithfulnessMetric(\n    threshold=0.7,           # 70% of claims must be faithful\n    include_reason=True      # Get explanation for debugging\n)\n\n# Run evaluation\nprint(\"Running faithfulness evaluation...\")\nfaithfulness.measure(test_case)\n\nprint(f\"\\n📊 Results:\")\nprint(f\"  Score: {faithfulness.score:.2f}\")\nprint(f\"  Threshold: {faithfulness.threshold}\")\nprint(f\"  Passed: {faithfulness.score >= faithfulness.threshold}\")\nprint(f\"\\n💬 Reason: {faithfulness.reason}\")\n\nif faithfulness.score < faithfulness.threshold:\n    print(\"\\n🚨 HALLUCINATION DETECTED!\")\n    print(\"The response contains claims not supported by the retrieved context.\")\nelse:\n    print(\"\\n✅ Response is faithful to context.\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# Step 4: Create Reusable Regression Test\n# =============================================================================\n#\n# This test can be added to your CI/CD pipeline to prevent the bug\n# from recurring. Every time you deploy, this test runs.\n#\n# =============================================================================\n\ndef test_no_hallucinated_endpoints():\n    \"\"\"\n    Regression test: DevHub should not invent API endpoints.\n\n    Bug: HALL-001\n    Root cause: Model extrapolated existing endpoints to non-existent batch endpoint\n    Fix: Added instruction to only cite explicit endpoints\n\n    This test ensures the fix remains effective.\n    \"\"\"\n    from deepeval import assert_test\n    from deepeval.test_case import LLMTestCase\n    from deepeval.metrics import FaithfulnessMetric\n\n    # Run the query that triggered the original bug\n    result = devhub_traced.query(\n        \"What's the API endpoint for processing batch refunds?\",\n        session_id=f\"{STUDENT_NAME}-regression-test\"\n    )\n\n    # Get retrieved context\n    context = []\n    for tr in result['tool_results']:\n        if tr['tool'] == 'search_docs':\n            context.extend(tr['result'].get('data', {}).get('documents', []))\n\n    if not context:\n        context = [\"No batch refund endpoint exists. Standard refund endpoint is POST /v1/refunds.\"]\n\n    # Create test case\n    test_case = LLMTestCase(\n        input=\"What's the API endpoint for processing batch refunds?\",\n        actual_output=result['response'],\n        retrieval_context=context\n    )\n\n    # Faithfulness metric - fails if model hallucinated\n    faithfulness = FaithfulnessMetric(threshold=0.7)\n\n    # This will raise AssertionError if faithfulness < 0.7\n    assert_test(test_case, [faithfulness])\n\n    return True\n\nprint(\"✅ Regression test function created: test_no_hallucinated_endpoints()\")\nprint(\"\\nThis test can be added to your CI/CD pipeline!\")\nprint(\"Run it with: pytest test_devhub.py::test_no_hallucinated_endpoints\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Lab 3 Complete!\n\nYou've created a regression test pipeline:\n\n### The Full Loop\n\n1. **Find failure** in Langfuse traces\n2. **Identify cause** using 5-Layer Framework\n3. **Extract test case** (input, output, context)\n4. **Add metric** (FaithfulnessMetric for hallucinations)\n5. **Create regression test** that runs in CI/CD\n\n### Key Metrics for Different Layers\n\n| Layer | DeepEval Metric |\n|-------|-----------------|\n| Generation (Hallucination) | `FaithfulnessMetric` |\n| Retrieval Quality | `ContextualRecallMetric` |\n| Response Quality | `AnswerRelevancyMetric` |\n| Custom Criteria | `GEval` with custom criteria |\n\n### Integration with Session 2\n\nThis connects directly to what you learned in Session 2:\n- Same DeepEval metrics\n- Same test case structure\n- Now with **trace-driven test creation**\n\n**The loop is closed:** Every production failure becomes a test that prevents recurrence.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Wrap-Up: Before and After\n\n![Before After Debugging](https://raw.githubusercontent.com/axel-sirota/salesforce-ai-workshops/main/exercises/session_04/charts/07_before_after_debugging.svg)\n\n| Before Langfuse | After Langfuse |\n|-----------------|----------------|\n| Hours guessing | 30 seconds to root cause |\n| \"The model is broken\" | \"Layer 1: Prompt context bleed\" |\n| Can't reproduce | Exact trace replay |\n| Bug comes back | Regression test prevents |",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## 5 Key Takeaways\n\n1. **Infrastructure traces (Jaeger)** show WHERE; **LLM traces (Langfuse)** show WHY\n\n2. **5-Layer Framework** systematically categorizes LLM failures:\n   - Prompt → Retrieval → Generation → Validation → Latency\n\n3. **30-second triage** with the decision tree:\n   - Error? → Latency\n   - Wrong tool? → Prompt\n   - Wrong params? → Validation\n   - Bad context? → Retrieval\n   - Invented facts? → Generation\n\n4. **Multi-turn sessions** enable context-aware debugging:\n   - See conversation history at decision time\n   - Understand how previous turns influence current decisions\n\n5. **Failure → Test** closes the loop:\n   - Find bug in traces → Create test case → Never happens again",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Take-Home Exercise: Pattern Analysis\n\n**Goal:** Run 30+ queries and identify failure patterns by category.\n\n**Instructions:**\n\n1. Create a diverse set of 30 queries:\n   - 10 documentation queries\n   - 10 owner queries\n   - 10 status queries\n\n2. Run each through DevHub with a unique session_id\n\n3. In Langfuse, analyze:\n   - Which query types fail most often?\n   - What's the most common failure layer?\n   - Are there patterns in the failures?\n\n4. Write a brief report:\n   - Top 3 failure patterns identified\n   - Recommended fixes for each\n   - Proposed regression tests\n\n**Submission:** Share your Langfuse session links and report with your instructor.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Next Session: Production Agent Architecture\n\nIn Session 5, you'll learn:\n- Scaling LLM applications to production\n- Rate limiting and cost control\n- Caching strategies for LLM responses\n- Error handling and retry patterns\n- Monitoring and alerting for production agents\n\n---\n\n## Session 4 Complete!\n\nYou now have the tools to debug any LLM application:\n\n| Tool | Purpose |\n|------|---------|\n| **Langfuse** | LLM-specific observability (reasoning, context, decisions) |\n| **5-Layer Framework** | Systematic failure diagnosis |\n| **30-Second Triage** | Rapid root cause identification |\n| **Failure → Test Pipeline** | Convert bugs into prevention |\n\n**The key insight:** With proper observability, LLM debugging goes from hours of guesswork to 30 seconds of trace analysis.\n\n**Happy debugging!**",
+   "metadata": {}
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.10.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}

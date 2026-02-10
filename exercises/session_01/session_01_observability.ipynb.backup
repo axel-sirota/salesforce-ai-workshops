@@ -1,0 +1,683 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n## Coming Up: Session 2 - Testing AI Applications\n\nIn Session 2, we'll learn how to **test AI applications** to prevent issues before they reach production.\n\n### Topics:\n- Why traditional testing doesn't work for AI\n- Introduction to DeepEval for AI testing\n- Testing retrieval quality\n- Testing response accuracy\n- Building a test suite for DevHub\n\n### You'll Build:\n- Automated tests for DevHub\n- Quality metrics dashboard\n- CI/CD integration for AI testing\n\n---\n\n## Congratulations!\n\nYou've completed **Session 1: Observability in AI Applications!**\n\n**Skills gained:**\n- Map AI systems to 5-layer framework\n- Instrument code with OpenTelemetry\n- Debug using distributed traces\n- Identify bottlenecks and data issues\n\nSee you in Session 2!\n\n---",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Take-Home Exercise\n\n**Design the architecture for your own AI system.**\n\nThink about an AI application you work on or want to build:\n\n1. **Draw the 5 layers** - What components fit in each layer?\n\n2. **Identify potential failure modes** - What could go wrong at each layer?\n\n3. **Design your spans** - What would you name them? What attributes would you capture?\n\n4. **Plan your debugging workflow** - If something goes wrong, what trace would help you find it?\n\n### Example template:\n\n```\nMy Application: _______________\n\nLayer 1 (Application):\n- Component: _______________\n- Potential failures: _______________\n- Key spans/attributes: _______________\n\nLayer 2 (Gateway):\n- Component: _______________\n- Potential failures: _______________\n- Key spans/attributes: _______________\n\n[Continue for all 5 layers]\n```\n\nBring your design to Session 2 for discussion!",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## 5 Key Takeaways\n\n### 1. Map Before You Debug\nUse the 5-layer framework to understand WHERE in your system a problem might be before diving into code.\n\n### 2. Attributes Are Everything\nThe span name tells you WHAT happened. Attributes tell you WHY. Always capture relevant metadata.\n\n### 3. Think in Hierarchies\nStructure your traces as parent-child relationships. This shows causality and helps identify which component triggered an issue.\n\n### 4. Instrument Early\nDon't wait for production problems. Add tracing during development so you're ready when issues arise.\n\n### 5. Use Semantic Conventions\nFollow OpenTelemetry semantic conventions (`db.system`, `http.method`, etc.) for consistent, interoperable traces.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Visual Comparison\n\n```mermaid\ngraph LR\n    subgraph Before[\"❌ BEFORE: No Tracing\"]\n        B1[\"User: It's slow\"]\n        B2[\"You: Check logs...\"]\n        B3[\"Logs: Processing...Done\"]\n        B4[\"You: ??? 🤷\"]\n        B5[\"4 HOURS debugging\"]\n        B1 --> B2 --> B3 --> B4 --> B5\n    end\n    \n    subgraph After[\"✅ AFTER: With Tracing\"]\n        A1[\"User: It's slow\"]\n        A2[\"You: Check Jaeger\"]\n        A3[\"Trace: vector_db 3100ms\"]\n        A4[\"You: Found it! 🎯\"]\n        A5[\"2 MINUTES to fix\"]\n        A1 --> A2 --> A3 --> A4 --> A5\n    end\n```\n\n| Metric | Before | After |\n|--------|--------|-------|\n| Debug time | 4 hours | 2 minutes |\n| Root cause found? | Maybe | Definitely |\n| Data to prove it | None | Trace + Attributes |\n| Confidence level | Low | High |",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Before vs After: The Impact of Observability\n\n### Before Tracing\n```\nUser: \"DevHub is slow\"\nYou:  \"Let me check the logs...\"\nLogs: \"Processing... Done.\"\nYou:  \"I have no idea what's wrong\"\nTime: 4 hours of guessing\n```\n\n### After Tracing\n```\nUser: \"DevHub is slow\"\nYou:  \"Let me check Jaeger...\"\nTrace: agent.query took 5200ms\n       └── vector_db.search took 3100ms\n           └── vector.latency_ms = 3100\nYou:  \"The vector database query is slow. It's hitting our\n       10% slow query simulation. In production, I'd check\n       the ChromaDB indexes and query complexity.\"\nTime: 2 minutes of analysis\n```\n\n**From 4 hours to 2 minutes. That's the power of observability.**",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Session 1: Wrap-Up\n\n## What You Learned Today\n\n### 1. The 5-Layer AI Architecture Framework\nYou can now map any AI application to five layers:\n- **Application** → User interface\n- **Gateway** → Validation and auth\n- **Orchestration** → Agent and tool selection\n- **LLM** → AI model calls\n- **Data** → Databases and APIs\n\n### 2. Distributed Tracing Concepts\nYou understand:\n- **Traces** = Complete request journey\n- **Spans** = Individual operations\n- **Attributes** = Contextual metadata\n- **Context propagation** = How traces stay connected\n\n### 3. OpenTelemetry Instrumentation\nYou can:\n- Set up a tracer provider\n- Create spans with `start_as_current_span()`\n- Add attributes with `set_attribute()`\n- Export traces to Jaeger\n\n### 4. Debugging with Traces\nYou diagnosed real issues:\n- Slow queries (VectorDB latency)\n- Stale data (inactive owners)\n- Poor retrieval (low similarity scores)",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "### Scenario 3: Solution\n\n<details>\n<summary>Click to reveal solution</summary>\n\n**Root Cause:** VectorDB low similarity simulation\n\n**What you should have found:**\n- The `vector_db.search` span has `vector.top_distance > 0.5`\n- Normal queries show distance of 0.1-0.3\n- The artificially inflated distance indicates poor retrieval\n\n**Why this happens:**\n- 15% of VectorDB queries artificially inflate distances (`VECTOR_DB_LOW_SIMILARITY_RATE = 0.15`)\n- The code adds 0.5 to all distances, making results appear irrelevant\n\n**In production, this could indicate:**\n- Poor embedding quality\n- Query not matching indexed content style\n- Stale or corrupted vector index\n- Wrong embedding model version\n\n**How tracing helped:**\nWithout tracing, users just say \"the answer is wrong.\" With tracing, you can see that the similarity score was low (0.67 vs normal 0.2), proving the retrieval layer returned poor matches.\n\n**The fix:**\n- Monitor similarity scores with alerts for low values\n- Re-index with better embeddings\n- Add a fallback for low-confidence results\n\n</details>",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SCENARIO 3: Your Analysis\n# =============================================================================\n# Record your findings from Jaeger here.\n\n# YOUR ANSWERS:\nspan_with_similarity = None    # PUT YOUR ANSWER HERE (e.g., \"vector_db.search\")\ntop_distance_value = None      # PUT YOUR ANSWER HERE (e.g., 0.67)\nquality_assessment = None      # PUT YOUR ANSWER HERE (\"good\" or \"bad\")\nsearch_query = None            # PUT YOUR ANSWER HERE\nresults_count = None           # PUT YOUR ANSWER HERE\n\n# Verification\nprint(\"Your Scenario 3 Analysis:\")\nprint(f\"  Span with similarity: {span_with_similarity}\")\nprint(f\"  vector.top_distance: {top_distance_value}\")\nprint(f\"  Quality assessment: {quality_assessment}\")\nprint(f\"  Search query: {search_query}\")\nprint(f\"  Results count: {results_count}\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "### Scenario 3: Analysis Worksheet\n\nGo to Jaeger and find a trace with poor retrieval quality. Answer these questions:\n\n| Question | Your Answer |\n|----------|-------------|\n| Which span shows similarity scores? | ___________ |\n| What is the `vector.top_distance` value? | ___________ |\n| Is this value good (< 0.3) or bad (> 0.5)? | ___________ |\n| What was the search query? | ___________ |\n| How many results were returned? | ___________ |\n\n**Hint:** In vector search, **lower distance = higher similarity**. A distance > 0.5 indicates poor match quality.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SCENARIO 3: Reproduce Poor Retrieval Quality\n# =============================================================================\n# Run documentation queries to trigger low similarity results.\n# The 15% low similarity rate means ~1 in 7 will have poor retrieval.\n\nprint(\"Running queries to reproduce poor retrieval issue...\")\nprint(\"(Run this cell multiple times if needed)\\n\")\n\nqueries = [\n    \"How do I handle errors in my API?\",\n    \"What are the database connection settings?\",\n    \"How do rate limits work?\",\n]\n\nfor i, q in enumerate(queries):\n    print(f\"Query {i+1}: '{q}'\")\n    \n    try:\n        result = instrumented_agent.query(q)\n        print(f\"  ✓ Got response (check Jaeger for similarity scores)\")\n        \n    except Exception as e:\n        print(f\"  ✗ Error: {e}\")\n    \n    print()\n\n# Flush traces\nprovider.force_flush()\n\nprint(f\"\"\"\n📊 Check Jaeger for poor retrieval:\n   {JAEGER_UI}\n\nLook for vector_db.search spans where:\n   vector.top_distance > 0.5\n\nNormal similarity: 0.1 - 0.3 (good match)\nPoor similarity: > 0.5 (bad match - results may be irrelevant)\n\"\"\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n## Scenario 3: Poor Retrieval Quality\n\n### The Problem\n\nUsers report: **\"The answers seem wrong or irrelevant sometimes. Like it's pulling the wrong documentation.\"**\n\nYour task:\n1. Reproduce the poor retrieval issue\n2. Find the trace in Jaeger\n3. Check the `vector.top_distance` attribute\n4. Understand what a high distance means\n\n### What You're Looking For:\n- A trace where `vector_db.search` was called\n- The `vector.top_distance` attribute showing a value > 0.5\n- High distance = low similarity = poor retrieval quality",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "### Scenario 2: Solution\n\n<details>\n<summary>Click to reveal solution</summary>\n\n**Root Cause:** TeamDB stale data simulation\n\n**What you should have found:**\n- The `team_db.find_owner` span has `owner.is_active = false`\n- The `owner.name` attribute shows \"David Kim\"\n- David Kim left the company but is still in the database\n\n**Why this happens:**\n- 10% of TeamDB lookups return inactive owners (`TEAM_DB_STALE_DATA_RATE = 0.10`)\n- The code preferentially returns inactive owners when triggered\n\n**In production, this could indicate:**\n- Employee data not synced with HR system\n- Cache not invalidated after employee departure\n- Missing data validation in the application\n\n**How tracing helped:**\nWithout tracing, you'd only see the wrong name in the response. With tracing, you can see the `is_active=false` attribute, proving the database returned stale data (not an LLM hallucination).\n\n**The fix:**\nAdd validation to filter out inactive owners, or fix the data sync issue.\n\n</details>",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SCENARIO 2: Your Analysis\n# =============================================================================\n# Record your findings from Jaeger here.\n\n# YOUR ANSWERS:\nspan_with_owner_info = None   # PUT YOUR ANSWER HERE (e.g., \"team_db.find_owner\")\nowner_name_attribute = None   # PUT YOUR ANSWER HERE (e.g., \"David Kim\")\nowner_is_active = None        # PUT YOUR ANSWER HERE (True or False)\nowner_email = None            # PUT YOUR ANSWER HERE\nshould_be_returned = None     # PUT YOUR ANSWER HERE (\"Yes\" or \"No\")\n\n# Verification\nprint(\"Your Scenario 2 Analysis:\")\nprint(f\"  Span with owner info: {span_with_owner_info}\")\nprint(f\"  owner.name: {owner_name_attribute}\")\nprint(f\"  owner.is_active: {owner_is_active}\")\nprint(f\"  owner.email: {owner_email}\")\nprint(f\"  Should this owner be returned? {should_be_returned}\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "### Scenario 2: Analysis Worksheet\n\nGo to Jaeger and find a trace where the wrong owner was returned. Answer these questions:\n\n| Question | Your Answer |\n|----------|-------------|\n| Which span contains owner information? | ___________ |\n| What is the `owner.name` attribute? | ___________ |\n| What is the `owner.is_active` attribute? | ___________ |\n| What is the `owner.email` attribute? | ___________ |\n| Should this owner have been returned? | Yes / No |\n\n**Hint:** Look for the `team_db.find_owner` span and examine its attributes.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SCENARIO 2: Reproduce the Wrong Owner Issue\n# =============================================================================\n# Run this query multiple times to trigger the stale data scenario.\n# The 10% stale data rate means ~1 in 10 will return inactive owner.\n\nprint(\"Running queries to reproduce stale owner issue...\")\nprint(\"(Run this cell multiple times if needed)\\n\")\n\nfor i in range(5):\n    print(f\"Query {i+1}: 'Who owns vector search?'\")\n    \n    try:\n        result = instrumented_agent.query(\"Who owns vector search?\")\n        \n        # Check if David Kim (inactive) was mentioned\n        if \"David Kim\" in result['response']:\n            print(f\"  ⚠️  STALE DATA! Got David Kim (who left the company)\")\n            print(f\"  Check this trace in Jaeger for owner.is_active=false\")\n        elif \"Emily Johnson\" in result['response']:\n            print(f\"  ✓ Correct: Got Emily Johnson (active owner)\")\n        else:\n            print(f\"  ? Response: {result['response'][:100]}...\")\n            \n    except Exception as e:\n        print(f\"  ✗ Error: {e}\")\n    \n    print()\n\n# Flush traces\nprovider.force_flush()\nprint(f\"\\n📊 Check Jaeger for stale data traces: {JAEGER_UI}\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n## Scenario 2: The Wrong Owner\n\n### The Problem\n\nUsers report: **\"I asked who owns vector search and got David Kim, but he left the company 6 months ago!\"**\n\nYour task:\n1. Reproduce the stale owner issue\n2. Find the trace in Jaeger\n3. Check the `owner.is_active` attribute\n4. Understand why stale data was returned\n\n### What You're Looking For:\n- A trace where `find_owner` was called\n- The `owner.is_active` attribute showing `false`\n- The owner name showing someone who should no longer be returned",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "### Scenario 1: Solution\n\n<details>\n<summary>Click to reveal solution</summary>\n\n**Root Cause:** VectorDB slow query simulation\n\n**What you should have found:**\n- The `vector_db.search` span took ~3000ms (3 seconds)\n- The `vector.latency_ms` attribute shows ~3000\n- This matches our configured `VECTOR_DB_SLOW_QUERY_LATENCY = 3000`\n\n**Why this happens:**\n- 10% of VectorDB queries are intentionally slowed (`VECTOR_DB_SLOW_QUERY_RATE = 0.10`)\n- The code sleeps for 3 seconds to simulate a slow query\n\n**In production, this could indicate:**\n- Database index issues\n- Large table scans\n- Network latency to vector database\n- Insufficient database resources\n\n**How tracing helped:**\nWithout tracing, you only knew \"it's slow sometimes.\" With tracing, you can see EXACTLY which component is slow and by how much.\n\n</details>",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SCENARIO 1: Your Analysis\n# =============================================================================\n# Record your findings from Jaeger here.\n\n# YOUR ANSWERS:\ntotal_trace_duration = None  # PUT YOUR ANSWER HERE (in ms)\nslowest_span_name = None     # PUT YOUR ANSWER HERE (e.g., \"vector_db.search\")\nslowest_span_duration = None # PUT YOUR ANSWER HERE (in ms)\nlatency_ms_attribute = None  # PUT YOUR ANSWER HERE (from span attributes)\nroot_cause = None            # PUT YOUR ANSWER HERE (e.g., \"VectorDB slow query simulation\")\n\n# Verification\nprint(\"Your Scenario 1 Analysis:\")\nprint(f\"  Total trace duration: {total_trace_duration} ms\")\nprint(f\"  Slowest span: {slowest_span_name}\")\nprint(f\"  Slowest span duration: {slowest_span_duration} ms\")\nprint(f\"  latency_ms attribute: {latency_ms_attribute} ms\")\nprint(f\"  Root cause: {root_cause}\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "### Scenario 1: Analysis Worksheet\n\nGo to Jaeger and find the slow trace. Then answer these questions:\n\n| Question | Your Answer |\n|----------|-------------|\n| What was the total trace duration? | ___ ms |\n| Which span took the longest? | ___________ |\n| How long did that span take? | ___ ms |\n| What is the `latency_ms` attribute value? | ___ ms |\n| What component caused the slowness? | ___________ |\n\n**Hint:** Look for the span with the longest duration bar in the waterfall view.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SCENARIO 1: Reproduce the Slow Query\n# =============================================================================\n# Run this query multiple times until you get a slow one.\n# The 10% slow query rate means ~1 in 10 will be slow.\n\nimport time\n\nprint(\"Running queries to reproduce slow query issue...\")\nprint(\"(Run this cell multiple times if needed)\\n\")\n\nfor i in range(5):\n    print(f\"Query {i+1}:\")\n    start = time.time()\n    \n    try:\n        result = instrumented_agent.query(\"How do I authenticate with the Payments API?\")\n        elapsed = time.time() - start\n        \n        # Flag slow queries\n        if elapsed > 2.0:\n            print(f\"  ⚠️  SLOW! Took {elapsed:.2f}s - Check this trace in Jaeger!\")\n        else:\n            print(f\"  ✓ Normal: {elapsed:.2f}s\")\n            \n    except Exception as e:\n        print(f\"  ✗ Error: {e}\")\n    \n    print()\n\n# Flush traces\nprovider.force_flush()\nprint(f\"\\n📊 Check Jaeger for slow traces: {JAEGER_UI}\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n## Scenario 1: The Slow Query\n\n### The Problem\n\nUsers report: **\"DevHub sometimes takes forever to respond - like 3+ seconds!\"**\n\nYour task:\n1. Reproduce the slow query issue\n2. Find the slow trace in Jaeger\n3. Identify which component is causing the slowness\n4. Determine why it's slow (check attributes)\n\n### What You're Looking For:\n- A trace that takes significantly longer than others\n- Which span within that trace is the bottleneck\n- The `latency_ms` attribute that confirms the slowness",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Jaeger UI Overview\n\n```mermaid\ngraph TB\n    subgraph JaegerUI[\"Jaeger UI Layout\"]\n        subgraph Header[\"🔍 Search Panel\"]\n            Service[\"Service Selector<br/>devhub-student-name\"]\n            Time[\"Time Range<br/>Last Hour\"]\n            Search[\"Find Traces Button\"]\n        end\n        \n        subgraph TraceList[\"📋 Trace List\"]\n            T1[\"Trace 1: agent.query - 5200ms\"]\n            T2[\"Trace 2: agent.query - 180ms\"]\n            T3[\"Trace 3: agent.query - 3400ms\"]\n        end\n        \n        subgraph TraceDetail[\"📊 Trace Detail (Waterfall)\"]\n            Root[\"agent.query ████████████████████\"]\n            Child1[\"├─ plan_tools ███\"]\n            Child2[\"├─ vector_db.search █████████████\"]\n            Child3[\"├─ team_db.find_owner ██\"]\n            Child4[\"└─ generate_response ████\"]\n        end\n        \n        subgraph Attributes[\"🏷️ Span Attributes\"]\n            Attr1[\"db.system: chromadb\"]\n            Attr2[\"vector.latency_ms: 3100\"]\n            Attr3[\"vector.top_distance: 0.23\"]\n        end\n    end\n    \n    Header --> TraceList\n    TraceList --> TraceDetail\n    TraceDetail --> Attributes\n```\n\n**Key Areas:**\n1. **Search Panel** - Filter traces by service, time, tags\n2. **Trace List** - All matching traces, sortable by duration\n3. **Waterfall View** - Visual timeline of spans\n4. **Attributes Panel** - Metadata for selected span",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## How to Use Jaeger for Debugging\n\n### Step-by-Step Navigation:\n\n1. **Open Jaeger UI** at the provided URL\n2. **Select your service** from the dropdown: `devhub-{STUDENT_NAME}`\n3. **Set time range** to \"Last Hour\" or appropriate window\n4. **Click \"Find Traces\"** to list all traces\n5. **Click on a trace** to see the span waterfall\n6. **Click on individual spans** to see attributes\n\n### What to Look For:\n\n| Issue Type | Where to Look | What to Check |\n|------------|---------------|---------------|\n| Slow requests | Span duration bars | Which span takes longest? |\n| Stale data | `team_db.find_owner` span | `owner.is_active` attribute |\n| Poor retrieval | `vector_db.search` span | `vector.top_distance` attribute |\n| Errors | Any span with red color | Error message in attributes |\n\n### Pro Tips:\n- Sort traces by **duration** to find slowest first\n- Use **Compare** feature to see differences between traces\n- Check **Logs** tab for any events within spans",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Lab 2: Debug Production Scenarios Using Traces\n\nNow that DevHub is instrumented, let's use traces to debug real issues!\n\n**Duration:** ~30 minutes\n\n**What you'll do:**\n1. Scenario 1: The Slow Query\n2. Scenario 2: The Wrong Owner\n3. Scenario 3: Poor Retrieval Quality\n\nFor each scenario:\n1. **Reproduce** the problem by running queries\n2. **Find** the relevant trace in Jaeger\n3. **Analyze** the spans and attributes\n4. **Identify** the root cause",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Session 1: Observability in AI Applications\n",
+    "\n",
+    "**Salesforce AI Workshop Series**\n",
+    "\n",
+    "---\n",
+    "\n",
+    "## Learning Objectives\n",
+    "\n",
+    "By the end of this session, you will be able to:\n",
+    "\n",
+    "1. **Map AI system architecture** using the 5-layer diagnostic framework\n",
+    "2. **Instrument Python code** with OpenTelemetry tracing\n",
+    "3. **Debug production issues** using distributed traces in Jaeger\n",
+    "4. **Identify bottlenecks** by analyzing span timings and attributes\n",
+    "5. **Diagnose data quality issues** through trace attributes\n",
+    "\n",
+    "## Prerequisites\n",
+    "\n",
+    "- Basic Python knowledge (functions, classes, decorators)\n",
+    "- Familiarity with APIs and JSON\n",
+    "- No prior observability experience required\n",
+    "\n",
+    "## Session Format\n",
+    "\n",
+    "- **~2.5 hours hands-on**\n",
+    "- Instructor demos followed by your labs\n",
+    "- All code runs in this notebook\n",
+    "- Traces visible in shared Jaeger instance"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "\n",
+    "## The Problem: \"It's Slow Sometimes\"\n",
+    "\n",
+    "Picture this scenario...\n",
+    "\n",
+    "Your team deployed an internal AI assistant called **DevHub**. It helps developers find documentation, locate service owners, and check system status.\n",
+    "\n",
+    "**Monday morning**, your Slack explodes:\n",
+    "\n",
+    "> \"DevHub is super slow today\" - @alex\n",
+    "> \n",
+    "> \"I asked who owns billing and got someone who left 6 months ago\" - @sarah\n",
+    "> \n",
+    "> \"The answers seem... wrong? Not relevant?\" - @mike\n",
+    "\n",
+    "You check the logs:\n",
+    "\n",
+    "```\n",
+    "INFO: Query received\n",
+    "INFO: Processing...\n",
+    "INFO: Response sent\n",
+    "```\n",
+    "\n",
+    "**That's it.** No errors. No clues. Just \"processing.\"\n",
+    "\n",
+    "You have NO IDEA:\n",
+    "- Where the time is being spent\n",
+    "- Why some queries are slow and others fast\n",
+    "- Whether the data being returned is stale or incorrect\n",
+    "- Which component is causing the problem\n",
+    "\n",
+    "**This session teaches you how to NEVER be in this situation again.**"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "\n",
+    "## What We'll Build Today\n",
+    "\n",
+    "1. **Understand** the 5-layer AI architecture framework\n",
+    "2. **Experience** DevHub V0 (the broken version with no observability)\n",
+    "3. **Learn** distributed tracing concepts (traces, spans, attributes)\n",
+    "4. **Instrument** DevHub with OpenTelemetry (Lab 1)\n",
+    "5. **Debug** three production scenarios using traces (Lab 2)\n",
+    "\n",
+    "---\n",
+    "\n",
+    "## Google Colab Setup\n",
+    "\n",
+    "If you're running this in Google Colab:\n",
+    "\n",
+    "1. **Runtime → Change runtime type → Python 3**\n",
+    "2. No GPU needed for this session\n",
+    "3. All data is loaded from this notebook (no external files needed)\n",
+    "\n",
+    "Let's start by installing the required packages..."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# =============================================================================\n",
+    "# INSTALL REQUIRED PACKAGES\n",
+    "# =============================================================================\n",
+    "# Run this cell first! It installs all dependencies needed for this session.\n",
+    "# This may take 1-2 minutes on first run.\n",
+    "\n",
+    "!pip install -q \\\n",
+    "    chromadb>=0.4.0 \\\n",
+    "    openai>=1.0.0 \\\n",
+    "    opentelemetry-api>=1.20.0 \\\n",
+    "    opentelemetry-sdk>=1.20.0 \\\n",
+    "    opentelemetry-exporter-otlp-proto-grpc>=1.20.0 \\\n",
+    "    grpcio>=1.50.0 \\\n",
+    "    rich>=13.0.0\n",
+    "\n",
+    "print(\"All packages installed successfully!\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# =============================================================================\n",
+    "# CONFIGURATION\n",
+    "# =============================================================================\n",
+    "# These credentials connect you to the shared workshop infrastructure.\n",
+    "# DO NOT CHANGE unless instructed by your instructor.\n",
+    "\n",
+    "import os\n",
+    "\n",
+    "# -----------------------------------------------------------------------------\n",
+    "# Jaeger Configuration (Distributed Tracing)\n",
+    "# -----------------------------------------------------------------------------\n",
+    "# Jaeger collects and visualizes traces from your application\n",
+    "JAEGER_ENDPOINT = \"http://46.224.233.5:4317\"  # OTLP gRPC endpoint for sending traces\n",
+    "JAEGER_UI = \"https://46.224.233.5/jaeger\"     # Web UI for viewing traces\n",
+    "\n",
+    "# -----------------------------------------------------------------------------\n",
+    "# OpenAI Configuration\n",
+    "# -----------------------------------------------------------------------------\n",
+    "# Your instructor will provide this key\n",
+    "OPENAI_API_KEY = \"sk-...\"  # INSTRUCTOR: Fill this before class\n",
+    "os.environ[\"OPENAI_API_KEY\"] = OPENAI_API_KEY\n",
+    "\n",
+    "# -----------------------------------------------------------------------------\n",
+    "# Student Identity\n",
+    "# -----------------------------------------------------------------------------\n",
+    "# CHANGE THIS to your name (lowercase, no spaces)\n",
+    "# This helps identify your traces in the shared Jaeger instance\n",
+    "STUDENT_NAME = \"your-name-here\"  # Example: \"john-smith\"\n",
+    "\n",
+    "# Validate student name\n",
+    "if STUDENT_NAME == \"your-name-here\" or \" \" in STUDENT_NAME:\n",
+    "    print(\"ERROR: Please set STUDENT_NAME to your name (lowercase, no spaces)\")\n",
+    "    print(\"   Example: STUDENT_NAME = 'john-smith'\")\n",
+    "else:\n",
+    "    print(f\"Student identity set: {STUDENT_NAME}\")\n",
+    "    print(f\"   Your traces will appear as: devhub-{STUDENT_NAME}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# TEST JAEGER CONNECTION\n# =============================================================================\n# This sends a test trace to verify Jaeger is reachable.\n\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter\nfrom opentelemetry.sdk.resources import Resource\n\n# Create a test tracer\ntest_resource = Resource.create({\"service.name\": f\"connection-test-{STUDENT_NAME}\"})\ntest_provider = TracerProvider(resource=test_resource)\ntest_exporter = OTLPSpanExporter(endpoint=JAEGER_ENDPOINT, insecure=True)\ntest_provider.add_span_processor(BatchSpanProcessor(test_exporter))\n\ntest_tracer = test_provider.get_tracer(\"connection-test\")\n\n# Send a test span\ntry:\n    with test_tracer.start_as_current_span(\"connection-test-span\") as span:\n        span.set_attribute(\"student.name\", STUDENT_NAME)\n        span.set_attribute(\"test.message\", \"Hello from Colab!\")\n    \n    # Force flush to ensure span is sent\n    test_provider.force_flush()\n    \n    print(\"Jaeger connection successful!\")\n    print(f\"   View your test trace at: {JAEGER_UI}\")\n    print(f\"   Search for service: connection-test-{STUDENT_NAME}\")\nexcept Exception as e:\n    print(f\"Jaeger connection failed: {e}\")\n    print(\"   Check that JAEGER_ENDPOINT is correct\")\n    print(\"   Ask your instructor for help\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# TEST OPENAI CONNECTION\n# =============================================================================\n# This makes a simple API call to verify OpenAI is reachable.\n\nfrom openai import OpenAI\n\ntry:\n    client = OpenAI()\n    \n    # Simple test call\n    response = client.chat.completions.create(\n        model=\"gpt-4o-mini\",\n        messages=[{\"role\": \"user\", \"content\": \"Say 'Hello Workshop!' in exactly 2 words\"}],\n        max_tokens=10\n    )\n    \n    result = response.choices[0].message.content\n    print(f\"OpenAI connection successful!\")\n    print(f\"   Response: {result}\")\n\nexcept Exception as e:\n    print(f\"OpenAI connection failed: {e}\")\n    print(\"   Check that OPENAI_API_KEY is set correctly\")\n    print(\"   Ask your instructor for help\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n## Setup Complete!\n\nIf you see success messages above for:\n- Packages installed\n- Student identity set\n- Jaeger connection\n- OpenAI connection\n\n**You're ready to begin!**\n\nIf any step failed, raise your hand or message in the workshop chat.\n\n---\n\n**Next:** We'll learn the 5-layer AI architecture framework that helps us understand WHERE problems can occur.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Topic 1: Understanding AI System Architecture\n\nBefore we can debug problems, we need to understand **where** problems can occur.\n\nEvery AI application - whether it's ChatGPT, a RAG system, or an AI agent - follows a similar architectural pattern. Understanding this pattern is the first step to effective debugging.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Why Architecture Matters for Debugging\n\nWhen something goes wrong, you need to ask: **\"Which layer is causing this?\"**\n\nWithout a mental model of your system's architecture:\n- You're guessing randomly\n- You check the wrong things first\n- You waste hours on red herrings\n\nWith a clear architecture framework:\n- You systematically narrow down the problem\n- You know which metrics/logs to check for each layer\n- You find root causes in minutes, not hours\n\n**The 5-Layer Framework** gives you this mental model for ANY AI application.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## The 5-Layer AI Architecture Framework\n\n```mermaid\nflowchart TB\n    subgraph L1[\"LAYER 1: APPLICATION\"]\n        A1[\"User Interface\"]\n        A2[\"CLI, Web UI, API, Chatbot\"]\n    end\n    \n    subgraph L2[\"LAYER 2: GATEWAY\"]\n        B1[\"Validation & Auth\"]\n        B2[\"Rate limiting, Input validation\"]\n    end\n    \n    subgraph L3[\"LAYER 3: ORCHESTRATION\"]\n        C1[\"Agent / Router\"]\n        C2[\"Tool selection, Multi-step reasoning\"]\n    end\n    \n    subgraph L4[\"LAYER 4: LLM\"]\n        D1[\"Language Model\"]\n        D2[\"OpenAI, Claude, Local models\"]\n    end\n    \n    subgraph L5[\"LAYER 5: DATA\"]\n        E1[\"Data Sources\"]\n        E2[\"VectorDB, SQL, APIs, Files\"]\n    end\n    \n    L1 --> L2 --> L3 --> L4\n    L3 --> L5\n    L4 --> L3\n    \n    style L1 fill:#e1f5fe\n    style L2 fill:#fff3e0\n    style L3 fill:#f3e5f5\n    style L4 fill:#e8f5e9\n    style L5 fill:#fce4ec\n```\n\nEach layer has **different failure modes** and **different debugging approaches**.\n\nLet's examine each layer...",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Layer 1: Application Layer\n\n**What it does:** The user-facing interface - how users interact with your AI system.\n\n**Examples:**\n- Command-line interface (CLI)\n- Web application (React, Flask)\n- REST API endpoints\n- Slack/Teams bot\n- Mobile app\n\n**Typical failures at this layer:**\n| Symptom | Possible Cause |\n|---------|----------------|\n| No response at all | Server not running, network issues |\n| Slow initial response | Cold start, connection pooling issues |\n| Formatting errors | Response parsing bugs |\n| Session issues | State management problems |\n\n**What to check:**\n- Server logs (is it even receiving requests?)\n- Network connectivity\n- Response serialization",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Layer 2: Gateway Layer\n\n**What it does:** Validates, authenticates, and rate-limits incoming requests before they reach core logic.\n\n**Examples:**\n- Input validation (query length, allowed characters)\n- Authentication (API keys, JWT tokens)\n- Rate limiting (requests per minute)\n- Request routing\n\n**Typical failures at this layer:**\n| Symptom | Possible Cause |\n|---------|----------------|\n| 401/403 errors | Auth misconfiguration |\n| 429 errors | Rate limit exceeded |\n| \"Invalid input\" errors | Validation too strict |\n| Requests rejected silently | Middleware misconfiguration |\n\n**What to check:**\n- Auth token validity\n- Rate limit counters\n- Validation rules\n- Middleware order",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Layer 3: Orchestration Layer\n\n**What it does:** Decides WHAT to do with a request - which tools to call, in what order, how to combine results.\n\n**Examples:**\n- AI Agents (LangChain, AutoGPT)\n- Tool/function routers\n- Multi-step pipelines\n- ReAct loops\n\n**Typical failures at this layer:**\n| Symptom | Possible Cause |\n|---------|----------------|\n| Wrong tool called | Poor tool descriptions, ambiguous query |\n| Infinite loops | Missing stop conditions |\n| Partial answers | Tool results not combined properly |\n| Inconsistent behavior | Non-deterministic routing |\n\n**What to check:**\n- Which tools were selected (and why)\n- Tool execution order\n- How results were combined\n- Agent reasoning steps\n\n**This is often the hardest layer to debug** - decisions are made by AI, not explicit code.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Layer 4: LLM Layer\n\n**What it does:** The \"brain\" - generates text, makes decisions, synthesizes information.\n\n**Examples:**\n- OpenAI GPT-4\n- Anthropic Claude\n- Local models (Llama, Mistral)\n- Embedding models\n\n**Typical failures at this layer:**\n| Symptom | Possible Cause |\n|---------|----------------|\n| Slow responses | Model overloaded, high token count |\n| Hallucinations | Insufficient context, wrong model |\n| Inconsistent outputs | Temperature too high |\n| Token limit errors | Context too long |\n| API errors | Rate limits, outages |\n\n**What to check:**\n- Token counts (input/output)\n- Model latency\n- Prompt content\n- Temperature/sampling settings\n- API error responses",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Layer 5: Data Layer\n\n**What it does:** Stores and retrieves information - documents, vectors, structured data, external APIs.\n\n**Examples:**\n- Vector databases (ChromaDB, Pinecone, Weaviate)\n- SQL/NoSQL databases\n- External APIs\n- File systems\n- Caches (Redis)\n\n**Typical failures at this layer:**\n| Symptom | Possible Cause |\n|---------|----------------|\n| Slow queries | Missing indexes, large scans |\n| Wrong results | Stale data, poor embeddings |\n| \"Not found\" errors | Data not indexed, wrong collection |\n| Connection errors | Database down, network issues |\n| Inconsistent data | Race conditions, no transactions |\n\n**What to check:**\n- Query latency\n- Result relevance scores (for vector search)\n- Data freshness\n- Connection pool status\n- Index health",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## DevHub: Mapped to 5 Layers\n\nNow let's see how our workshop application **DevHub** maps to this framework:\n\n```mermaid\nflowchart TB\n    subgraph L1[\"LAYER 1: APPLICATION\"]\n        A1[\"Notebook Interface\"]\n    end\n    \n    subgraph L2[\"LAYER 2: GATEWAY\"]\n        B1[\"Input Validation\"]\n    end\n    \n    subgraph L3[\"LAYER 3: ORCHESTRATION\"]\n        C1[\"DevHubAgent\"]\n        C2[\"Tools: search_docs | find_owner | check_status\"]\n    end\n    \n    subgraph L4[\"LAYER 4: LLM\"]\n        D1[\"OpenAI GPT-4o-mini\"]\n    end\n    \n    subgraph L5[\"LAYER 5: DATA\"]\n        E1[\"VectorDB<br/>(ChromaDB)<br/>8 docs\"]\n        E2[\"TeamDB<br/>(In-memory)<br/>5 owners\"]\n        E3[\"StatusAPI<br/>(Mock)<br/>5 services\"]\n    end\n    \n    L1 --> L2 --> L3\n    C1 --> D1\n    C1 --> E1\n    C1 --> E2\n    C1 --> E3\n    D1 --> C1\n    \n    style L1 fill:#e1f5fe\n    style L2 fill:#fff3e0\n    style L3 fill:#f3e5f5\n    style L4 fill:#e8f5e9\n    style L5 fill:#fce4ec\n```\n\n**Where are DevHub's problems?**\n- VectorDB (Layer 5): Slow queries, connection failures, low similarity\n- TeamDB (Layer 5): Stale data (inactive owners)\n- StatusAPI (Layer 5): Timeouts\n\nMost of DevHub's intentional problems are in **Layer 5 (Data)** - but without tracing, you wouldn't know that!",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Key Insight: Layer-Based Debugging\n\n**Each layer has different:**\n- Failure modes\n- Symptoms\n- Debugging tools\n- Metrics to monitor\n\nWhen something goes wrong:\n\n1. **Identify which layer** is causing the issue\n2. **Use layer-appropriate tools** to investigate\n3. **Fix at the right level** (don't patch symptoms)\n\n**Coming up:** We'll experience DevHub's problems firsthand, then learn how distributed tracing helps us identify WHICH layer is failing.\n\n---",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Topic 2: DevHub - Our Workshop Application\n\nNow let's meet the application we'll be debugging throughout this workshop.\n\n**DevHub** is an internal developer knowledge assistant. It helps developers:\n- Find documentation\n- Locate service owners\n- Check system status\n\nBut it has problems... problems you'll learn to diagnose.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## What DevHub Does\n\nDevHub answers three types of questions:\n\n### 1. Documentation Search\n> \"How do I authenticate with the Payments API?\"\n\nUses **VectorDB** (ChromaDB) to find relevant documentation through semantic search.\n\n### 2. Owner Lookup\n> \"Who owns the billing service?\"\n\nUses **TeamDB** (In-memory) to find the team and person responsible for a service.\n\n### 3. Status Check\n> \"Is staging working?\"\n\nUses **StatusAPI** to check if services are healthy, degraded, or down.\n\n### Multi-Tool Queries\n> \"How do I use Auth SDK and who can help?\"\n\nThe agent can call **multiple tools** to answer complex questions.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## DevHub Request Flow\n\n```mermaid\nflowchart LR\n    A[\"User Query\"] --> B[\"Agent Receives\"]\n    B --> C[\"Tool Planning<br/>(LLM)\"]\n    C --> D[\"Tool Execution\"]\n    D --> E[\"VectorDB.search()\"]\n    D --> F[\"TeamDB.find_owner()\"]\n    D --> G[\"StatusAPI.check()\"]\n    E --> H[\"Response Synthesis<br/>(LLM)\"]\n    F --> H\n    G --> H\n    H --> I[\"User Answer\"]\n    \n    style C fill:#e8f5e9\n    style H fill:#e8f5e9\n    style E fill:#fce4ec\n    style F fill:#fce4ec\n    style G fill:#fce4ec\n```\n\nThe agent:\n1. **Receives** the user's question\n2. **Plans** which tools to call (using LLM)\n3. **Executes** each tool\n4. **Synthesizes** results into a coherent answer (using LLM)\n\n**Problem:** Without tracing, you can't see steps 2, 3, or 4!",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# DEVHUB V0 - THE UNINSTRUMENTED VERSION\n# =============================================================================\n# This is the \"broken\" version of DevHub - it works, but has intentional\n# problems and NO observability. You'll experience the pain of debugging\n# without tracing, then fix it in Lab 1.\n#\n# INTENTIONAL PROBLEMS (you'll discover these):\n# - 10% of VectorDB queries are slow (3 seconds)\n# - 5% of VectorDB queries fail (connection error)\n# - 15% of VectorDB results have low similarity (bad retrieval)\n# - 10% of TeamDB lookups return stale data (inactive owners)\n# - 2% of StatusAPI calls timeout\n#\n# DO NOT MODIFY THIS CELL - you'll create an instrumented version in Lab 1\n\nimport json\nimport random\nimport time\nfrom pathlib import Path\n\nimport chromadb\nfrom chromadb.config import Settings\nfrom openai import OpenAI\n\n\n# -----------------------------------------------------------------------------\n# Configuration\n# -----------------------------------------------------------------------------\nclass Config:\n    \"\"\"Configuration with intentional failure rates for workshop scenarios.\"\"\"\n\n    # Failure rates\n    VECTOR_DB_FAILURE_RATE = 0.05        # 5% connection failures\n    VECTOR_DB_SLOW_QUERY_RATE = 0.10     # 10% slow queries\n    VECTOR_DB_LOW_SIMILARITY_RATE = 0.15 # 15% bad retrieval\n    TEAM_DB_STALE_DATA_RATE = 0.10       # 10% stale contacts\n    STATUS_API_TIMEOUT_RATE = 0.02       # 2% timeouts\n\n    # Latency settings (ms)\n    VECTOR_DB_LATENCY_MIN = 50\n    VECTOR_DB_LATENCY_MAX = 200\n    VECTOR_DB_SLOW_QUERY_LATENCY = 3000\n\n    # LLM settings\n    LLM_MODEL = \"gpt-4o-mini\"\n\n\n# -----------------------------------------------------------------------------\n# Data (embedded for Colab compatibility)\n# -----------------------------------------------------------------------------\nDOCS_DATA = [\n    {\"id\": \"doc-payments-auth\", \"title\": \"Payments API Authentication\", \"category\": \"api\",\n     \"content\": \"To authenticate with the Payments API, use OAuth 2.0 client credentials flow. First, obtain your client_id and client_secret from the Developer Portal. Make a POST request to /oauth/token with grant_type=client_credentials. The response contains an access_token valid for 1 hour. Include this token in the Authorization header as 'Bearer {token}' for all subsequent requests.\"},\n    {\"id\": \"doc-auth-sdk\", \"title\": \"Auth SDK Quick Start\", \"category\": \"sdk\",\n     \"content\": \"Install the Auth SDK with 'pip install company-auth-sdk'. Initialize with AuthClient(client_id, client_secret). Call client.authenticate() to get a session. The SDK handles token refresh automatically. For service-to-service auth, use ServiceAuth class instead.\"},\n    {\"id\": \"doc-billing-service\", \"title\": \"Billing Service Overview\", \"category\": \"service\",\n     \"content\": \"The Billing Service handles subscription management, invoicing, and payment processing. REST APIs: POST /v1/subscriptions (create), GET /v1/subscriptions/{id} (read), POST /v1/invoices (generate). For access requests, contact the Billing team.\"},\n    {\"id\": \"doc-vector-search\", \"title\": \"Vector Search Best Practices\", \"category\": \"guide\",\n     \"content\": \"When using Vector Search: 1) Use embedding dimension 1536 for OpenAI compatibility. 2) Batch inserts for bulk data (max 100 vectors/call). 3) Set top_k between 3-5 for most use cases. 4) Monitor similarity scores - below 0.7 indicates poor matches.\"},\n    {\"id\": \"doc-staging-env\", \"title\": \"Staging Environment Guide\", \"category\": \"environment\",\n     \"content\": \"Staging environment mirrors production at staging.internal.company.com. Access requires VPN connection. Data is refreshed weekly from anonymized production data. Known limitations: Payments API uses sandbox mode only.\"},\n    {\"id\": \"doc-error-handling\", \"title\": \"Error Handling Standards\", \"category\": \"standards\",\n     \"content\": \"All APIs must return standard error format: {error: {code, message, details, correlation_id}}. HTTP codes: 400 bad input, 401 auth failure, 403 forbidden, 404 not found, 429 rate limited, 500 server error.\"},\n    {\"id\": \"doc-rate-limiting\", \"title\": \"Rate Limiting Configuration\", \"category\": \"api\",\n     \"content\": \"Default rate limits: 100 requests/minute authenticated, 10 requests/minute unauthenticated. Response headers: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset.\"},\n    {\"id\": \"doc-db-connection-pool\", \"title\": \"Database Connection Pooling\", \"category\": \"guide\",\n     \"content\": \"Use connection pooling for all database access. Recommended: min_pool_size=5, max_pool_size=20, connection_timeout=30s. If seeing 'connection pool exhausted' errors: check for connection leaks.\"},\n]\n\nTEAMS_DATA = {\n    \"teams\": [\n        {\"id\": \"team-payments\", \"name\": \"Payments Team\", \"slack_channel\": \"#payments-support\"},\n        {\"id\": \"team-platform\", \"name\": \"Platform Team\", \"slack_channel\": \"#platform-help\"},\n        {\"id\": \"team-auth\", \"name\": \"Auth Team\", \"slack_channel\": \"#auth-support\"},\n        {\"id\": \"team-data\", \"name\": \"Data Platform Team\", \"slack_channel\": \"#data-platform\"},\n    ],\n    \"owners\": [\n        {\"id\": \"owner-sarah\", \"name\": \"Sarah Chen\", \"email\": \"sarah.chen@company.com\", \"slack\": \"@sarah.chen\", \"team_id\": \"team-payments\", \"services\": [\"payments-api\", \"billing-service\", \"billing\"], \"is_active\": True},\n        {\"id\": \"owner-david\", \"name\": \"David Kim\", \"email\": \"david.kim@company.com\", \"slack\": \"@david.kim\", \"team_id\": \"team-data\", \"services\": [\"vector-search\", \"embeddings\"], \"is_active\": False},  # LEFT COMPANY\n        {\"id\": \"owner-emily\", \"name\": \"Emily Johnson\", \"email\": \"emily.johnson@company.com\", \"slack\": \"@emily.j\", \"team_id\": \"team-data\", \"services\": [\"vector-search\", \"embeddings\", \"data-pipeline\"], \"is_active\": True},\n        {\"id\": \"owner-michael\", \"name\": \"Michael Brown\", \"email\": \"michael.brown@company.com\", \"slack\": \"@mbrown\", \"team_id\": \"team-auth\", \"services\": [\"auth-service\", \"auth-sdk\"], \"is_active\": True},\n        {\"id\": \"owner-lisa\", \"name\": \"Lisa Wang\", \"email\": \"lisa.wang@company.com\", \"slack\": \"@lisa.wang\", \"team_id\": \"team-platform\", \"services\": [\"staging\", \"api-gateway\"], \"is_active\": True},\n    ]\n}\n\nSTATUS_DATA = {\n    \"services\": [\n        {\"name\": \"payments-api\", \"status\": \"healthy\", \"uptime\": 99.95},\n        {\"name\": \"auth-service\", \"status\": \"healthy\", \"uptime\": 99.99},\n        {\"name\": \"staging\", \"status\": \"degraded\", \"uptime\": 95.5, \"incident\": \"Database connection pool exhaustion\"},\n        {\"name\": \"vector-search\", \"status\": \"healthy\", \"uptime\": 99.8},\n        {\"name\": \"api-gateway\", \"status\": \"healthy\", \"uptime\": 99.99},\n    ]\n}\n\n\n# -----------------------------------------------------------------------------\n# VectorDB Service\n# -----------------------------------------------------------------------------\nclass VectorDB:\n    \"\"\"Vector database for semantic document search. Has intentional problems.\"\"\"\n\n    def __init__(self):\n        self._client = chromadb.Client(Settings(anonymized_telemetry=False))\n        self._collection = self._client.get_or_create_collection(\n            name=\"devhub_docs\",\n            metadata={\"hnsw:space\": \"cosine\"}\n        )\n        self._load_documents()\n\n    def _load_documents(self):\n        ids = [doc[\"id\"] for doc in DOCS_DATA]\n        texts = [doc[\"content\"] for doc in DOCS_DATA]\n        metadatas = [{\"title\": doc[\"title\"], \"category\": doc[\"category\"]} for doc in DOCS_DATA]\n        self._collection.upsert(ids=ids, documents=texts, metadatas=metadatas)\n\n    def search(self, query: str, top_k: int = 3) -> dict:\n        start_time = time.time()\n\n        # INTENTIONAL PROBLEM 1: Connection failure (5%)\n        if random.random() < Config.VECTOR_DB_FAILURE_RATE:\n            raise ConnectionError(\"VectorDB connection failed: ECONNREFUSED\")\n\n        # INTENTIONAL PROBLEM 2: Slow query (10%)\n        if random.random() < Config.VECTOR_DB_SLOW_QUERY_RATE:\n            time.sleep(Config.VECTOR_DB_SLOW_QUERY_LATENCY / 1000)\n        else:\n            time.sleep(random.randint(Config.VECTOR_DB_LATENCY_MIN, Config.VECTOR_DB_LATENCY_MAX) / 1000)\n\n        results = self._collection.query(query_texts=[query], n_results=top_k)\n\n        distances = results[\"distances\"][0] if results[\"distances\"] else []\n\n        # INTENTIONAL PROBLEM 3: Low similarity (15%)\n        if random.random() < Config.VECTOR_DB_LOW_SIMILARITY_RATE:\n            distances = [d + 0.5 for d in distances]\n\n        return {\n            \"documents\": results[\"documents\"][0] if results[\"documents\"] else [],\n            \"metadatas\": results[\"metadatas\"][0] if results[\"metadatas\"] else [],\n            \"distances\": distances,\n            \"latency_ms\": int((time.time() - start_time) * 1000)\n        }\n\n\n# -----------------------------------------------------------------------------\n# TeamDB Service\n# -----------------------------------------------------------------------------\nclass TeamDB:\n    \"\"\"Team/owner lookup database. Has intentional stale data problem.\"\"\"\n\n    def __init__(self):\n        self.teams = {t[\"id\"]: t for t in TEAMS_DATA[\"teams\"]}\n        self.owners = TEAMS_DATA[\"owners\"]\n\n    def find_owner(self, service_name: str) -> dict:\n        start_time = time.time()\n        time.sleep(random.randint(20, 100) / 1000)  # Simulate latency\n\n        # Find owners for this service\n        matching_owners = [o for o in self.owners if service_name.lower() in [s.lower() for s in o[\"services\"]]]\n\n        if not matching_owners:\n            return {\"found\": False, \"latency_ms\": int((time.time() - start_time) * 1000)}\n\n        # INTENTIONAL PROBLEM: Stale data (10%) - return inactive owner\n        if random.random() < Config.TEAM_DB_STALE_DATA_RATE:\n            # Find inactive owner if exists\n            inactive = [o for o in matching_owners if not o[\"is_active\"]]\n            if inactive:\n                owner = inactive[0]\n            else:\n                owner = matching_owners[0]\n        else:\n            # Normal: return active owner\n            active = [o for o in matching_owners if o[\"is_active\"]]\n            owner = active[0] if active else matching_owners[0]\n\n        team = self.teams.get(owner[\"team_id\"], {})\n\n        return {\n            \"found\": True,\n            \"owner\": owner,\n            \"team\": team,\n            \"latency_ms\": int((time.time() - start_time) * 1000)\n        }\n\n\n# -----------------------------------------------------------------------------\n# StatusAPI Service\n# -----------------------------------------------------------------------------\nclass StatusAPI:\n    \"\"\"Service status checker. Has intentional timeout problem.\"\"\"\n\n    def __init__(self):\n        self.services = {s[\"name\"]: s for s in STATUS_DATA[\"services\"]}\n\n    def check_status(self, service_name: str) -> dict:\n        start_time = time.time()\n\n        # INTENTIONAL PROBLEM: Timeout (2%)\n        if random.random() < Config.STATUS_API_TIMEOUT_RATE:\n            time.sleep(5)  # 5 second timeout\n            raise TimeoutError(f\"StatusAPI timeout checking {service_name}\")\n\n        time.sleep(random.randint(30, 150) / 1000)  # Normal latency\n\n        service = self.services.get(service_name.lower())\n\n        if not service:\n            return {\"found\": False, \"latency_ms\": int((time.time() - start_time) * 1000)}\n\n        return {\n            \"found\": True,\n            \"service\": service,\n            \"latency_ms\": int((time.time() - start_time) * 1000)\n        }\n\n\n# -----------------------------------------------------------------------------\n# DevHubAgent\n# -----------------------------------------------------------------------------\nclass DevHubAgent:\n    \"\"\"AI agent that orchestrates tools to answer developer questions.\"\"\"\n\n    TOOL_PLANNING_PROMPT = \"\"\"You are a tool planner. Based on the user's question, decide which tools to call.\n\nAvailable tools:\n1. search_docs: Search documentation. Use for \"how to\", needs docs, wants examples. Args: {\"query\": \"search terms\"}\n2. find_owner: Find service owner. Use for \"who owns\", \"who can help\". Args: {\"service\": \"service name\"}\n3. check_status: Check service health. Use for \"is X working\", \"status of\". Args: {\"service\": \"service name\"}\n\nReturn ONLY a JSON array: [{\"tool\": \"name\", \"args\": {...}}, ...]\nIf no tools needed, return: []\n\nUser question: {query}\"\"\"\n\n    RESPONSE_PROMPT = \"\"\"Based on the user's question and tool results, provide a helpful response.\n\nUser question: {query}\n\nTool results:\n{results}\n\nGuidelines:\n- Be concise and actionable\n- If owner is inactive (is_active: false), mention this\n- If service is degraded, clearly state this\n- If similarity scores are low (distance > 0.5), mention answers may not be accurate\"\"\"\n\n    def __init__(self):\n        self.vector_db = VectorDB()\n        self.team_db = TeamDB()\n        self.status_api = StatusAPI()\n        self.client = OpenAI()\n\n    def _plan_tools(self, query: str) -> list:\n        response = self.client.chat.completions.create(\n            model=Config.LLM_MODEL,\n            messages=[\n                {\"role\": \"system\", \"content\": \"You are a tool planning assistant. Respond only with valid JSON.\"},\n                {\"role\": \"user\", \"content\": self.TOOL_PLANNING_PROMPT.format(query=query)}\n            ],\n            temperature=0.1,\n            max_tokens=256\n        )\n        content = response.choices[0].message.content.strip()\n        if content.startswith(\"```\"):\n            content = content.split(\"```\")[1]\n            if content.startswith(\"json\"):\n                content = content[4:]\n        try:\n            return json.loads(content.strip())\n        except:\n            return []\n\n    def _execute_tool(self, tool_name: str, args: dict) -> dict:\n        result = {\"tool\": tool_name, \"success\": False, \"data\": None, \"error\": None}\n        try:\n            if tool_name == \"search_docs\":\n                result[\"data\"] = self.vector_db.search(args.get(\"query\", \"\"))\n                result[\"success\"] = True\n            elif tool_name == \"find_owner\":\n                result[\"data\"] = self.team_db.find_owner(args.get(\"service\", \"\"))\n                result[\"success\"] = True\n            elif tool_name == \"check_status\":\n                result[\"data\"] = self.status_api.check_status(args.get(\"service\", \"\"))\n                result[\"success\"] = True\n        except Exception as e:\n            result[\"error\"] = str(e)\n        return result\n\n    def _generate_response(self, query: str, tool_results: list) -> str:\n        response = self.client.chat.completions.create(\n            model=Config.LLM_MODEL,\n            messages=[\n                {\"role\": \"system\", \"content\": \"You are DevHub, a helpful developer assistant.\"},\n                {\"role\": \"user\", \"content\": self.RESPONSE_PROMPT.format(query=query, results=json.dumps(tool_results, indent=2))}\n            ],\n            temperature=0.3,\n            max_tokens=1024\n        )\n        return response.choices[0].message.content\n\n    def query(self, user_query: str) -> dict:\n        planned_tools = self._plan_tools(user_query)\n        tool_results = [self._execute_tool(t[\"tool\"], t.get(\"args\", {})) for t in planned_tools]\n        response = self._generate_response(user_query, tool_results)\n        return {\n            \"response\": response,\n            \"tools_called\": [t[\"tool\"] for t in planned_tools],\n            \"tool_results\": tool_results\n        }\n\n\nprint(\"DevHub V0 loaded successfully!\")\nprint(\"   Classes available: Config, VectorDB, TeamDB, StatusAPI, DevHubAgent\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# INITIALIZE DEVHUB\n# =============================================================================\n# Create instances of all services and the agent.\n\nprint(\"Initializing DevHub...\")\n\n# Create the agent (this also initializes all services)\nagent = DevHubAgent()\n\nprint(\"DevHub initialized!\")\nprint(f\"   - VectorDB: {len(DOCS_DATA)} documents loaded\")\nprint(f\"   - TeamDB: {len(TEAMS_DATA['owners'])} owners loaded\")\nprint(f\"   - StatusAPI: {len(STATUS_DATA['services'])} services loaded\")\nprint(\"\\nReady to answer questions!\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# DEMO: Run a documentation query\n# =============================================================================\n# The instructor will run this to show DevHub in action.\n\nquery = \"How do I authenticate with the Payments API?\"\n\nprint(f\"Question: {query}\")\nprint(\"-\" * 50)\n\nresult = agent.query(query)\n\nprint(f\"\\nAnswer:\\n{result['response']}\")\nprint(f\"\\nTools used: {result['tools_called']}\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# DEMO: Try different query types\n# =============================================================================\n\nqueries = [\n    \"Who owns the billing service?\",\n    \"Is staging working?\",\n    \"How do I use Auth SDK and who can help me with it?\"\n]\n\nfor q in queries:\n    print(f\"\\n{'='*60}\")\n    print(f\"Question: {q}\")\n    print(\"-\" * 60)\n\n    result = agent.query(q)\n\n    print(f\"Answer: {result['response'][:200]}...\")\n    print(f\"Tools: {result['tools_called']}\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n## Lab 1.1: Explore DevHub\n\nNow it's your turn! Run DevHub yourself and observe its behavior.\n\n### Your Tasks:\n\n1. Run at least **5 different queries** using the code cell below\n2. **Time each query** mentally (or use the latency info)\n3. **Note any issues** you observe:\n   - Slow responses\n   - Strange answers\n   - Errors\n\n### Suggested queries to try:\n- \"How do I connect to the database?\"\n- \"Who owns vector search?\"\n- \"Is the payments API working?\"\n- \"What are the rate limits?\"\n- \"How do I handle errors?\"\n\n### Questions to answer:\n- Did any queries feel slow? How slow?\n- Did any answers seem wrong or outdated?\n- Did any queries fail completely?",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# LAB 1.1: Explore DevHub\n# =============================================================================\n# Run different queries and observe the behavior.\n# Note: Some queries might be slow or return unexpected results!\n\n# Query 1\nresult1 = agent.query(\"How do I connect to the database?\")\nprint(f\"Q1 Answer: {result1['response'][:150]}...\")\nprint(f\"   Tools: {result1['tools_called']}\\n\")\n\n# Query 2 - PUT YOUR CODE HERE: Try a different query\n# result2 = agent.query(\"...\")\n# print(f\"Q2 Answer: {result2['response'][:150]}...\")\n\n# Query 3 - PUT YOUR CODE HERE\n# result3 = agent.query(\"...\")\n\n# Query 4 - PUT YOUR CODE HERE\n# result4 = agent.query(\"...\")\n\n# Query 5 - PUT YOUR CODE HERE\n# result5 = agent.query(\"...\")\n\n# -----------------------------------------------------------------------------\n# YOUR OBSERVATIONS\n# -----------------------------------------------------------------------------\n# Did any queries feel slow? Which ones?\n# YOUR ANSWER:\n\n# Did any answers seem wrong or outdated?\n# YOUR ANSWER:\n\n# Did any queries fail? What was the error?\n# YOUR ANSWER:",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n## The Frustration Exercise\n\nSomething is wrong with DevHub. Users are complaining about:\n- Slow responses (sometimes 3+ seconds)\n- Wrong owner information\n- Irrelevant search results\n\n**Your challenge:** Figure out what's causing these problems.\n\n### What you have available:\n- The source code (Cell above)\n- The ability to run queries\n- Print statements\n- Basic logging\n\n### What you DON'T have:\n- Any tracing or observability\n- Metrics dashboards\n- Performance profiling\n\n**Try to debug it.** We'll see how far you get...",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# TRY TO DEBUG DEVHUB\n# =============================================================================\n# Add print statements, timing, whatever you think might help.\n# Spoiler: It's going to be frustrating.\n\nimport time\n\n# Let's add some \"debugging\"\ndef debug_query(query):\n    print(f\"[DEBUG] Starting query: {query}\")\n    start = time.time()\n\n    try:\n        result = agent.query(query)\n        elapsed = time.time() - start\n\n        print(f\"[DEBUG] Query completed in {elapsed:.2f}s\")\n        print(f\"[DEBUG] Tools called: {result['tools_called']}\")\n\n        # What else can we check?\n        # We don't know:\n        # - How long each tool took\n        # - What data each tool returned\n        # - Whether the data was stale\n        # - Whether similarity scores were low\n\n        return result\n\n    except Exception as e:\n        print(f\"[DEBUG] Query failed: {e}\")\n        # But WHY did it fail? Which component?\n        return None\n\n# Try it\nprint(\"Running debug query...\\n\")\nresult = debug_query(\"Who owns vector search?\")\n\nif result:\n    print(f\"\\nAnswer: {result['response']}\")\n\nprint(\"\\n\" + \"=\"*60)\nprint(\"Questions you can't answer with print statements:\")\nprint(\"- Which specific component was slow?\")\nprint(\"- Was the returned data fresh or stale?\")\nprint(\"- What was the similarity score of the search results?\")\nprint(\"- Why did that component fail?\")\nprint(\"=\"*60)",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n## Discussion: What Information Would Help?\n\nYou just experienced the **pain of debugging without observability**.\n\n### With print statements, you learned:\n- Total query time\n- Which tools were called\n- Whether it succeeded or failed\n\n### But you COULDN'T learn:\n- How long EACH tool took\n- What data each tool actually returned\n- Whether data was stale (is_active field)\n- What the similarity scores were\n- Which specific line of code was slow\n- The sequence of operations\n\n### What we need:\nA way to **trace the entire request** through all components, capturing:\n- **Timing** for each operation\n- **Data** passed between components\n- **Errors** with full context\n- **Relationships** between operations\n\n**This is exactly what distributed tracing provides.**\n\n---\n\n**Next:** We'll learn the concepts behind distributed tracing, then instrument DevHub to capture all this information.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Topic 3: Distributed Tracing with OpenTelemetry\n\nNow that you've felt the pain of debugging without visibility, let's learn the solution: **distributed tracing**.\n\nTracing gives you a complete picture of what happens during a request - where time is spent, what data flows through, and where errors occur.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## The Problem: Where's the Bottleneck?\n\nIn modern applications, a single user request might:\n- Hit multiple services\n- Make database queries\n- Call external APIs\n- Invoke AI models\n\n**Example:** Your DevHub query:\n1. Application receives request\n2. Agent plans tools (calls LLM)\n3. VectorDB searches documents\n4. TeamDB looks up owner\n5. LLM synthesizes response\n6. Application returns answer\n\nIf the total time is 5 seconds, **WHERE** is that time spent?\n- Is it the VectorDB query?\n- Is it the LLM call?\n- Is it network latency?\n\n**Without tracing, you're guessing.**",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## The Black Box Problem\n\n```mermaid\nflowchart LR\n    A[\"Request\"] --> B[\"???<br/>BLACK BOX<br/>???<br/>??? ms<br/>??? ops\"]\n    B --> C[\"Response\"]\n    \n    D[\"Logs:<br/>Processing...<br/>Done.\"] -.-> B\n    \n    style B fill:#333,color:#fff\n```\n\nWithout tracing:\n- You see the **input** (request)\n- You see the **output** (response)\n- You see the **total time**\n- You DON'T see what happened **inside**\n\nThis is the \"black box\" problem.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## What is a Trace?\n\nA **trace** represents the **complete journey** of a single request through your system.\n\n### Key properties:\n- **Unique Trace ID**: Every trace has a unique identifier (e.g., `a1b2c3d4e5f6`)\n- **Spans**: A trace contains multiple \"spans\" (we'll explain next)\n- **Causality**: Shows which operations triggered which other operations\n- **Timing**: Captures start time, end time, and duration\n\n### Example Trace:\n```\nTrace ID: abc123\n\n[0ms]──────────────────────────────────────────────[5200ms]\n│                                                        │\n│  agent.query (total: 5200ms)                          │\n│    │                                                   │\n│    ├──[50ms] tool_planning (LLM call)                 │\n│    │                                                   │\n│    ├──[3100ms] vector_db.search  <- SLOW!             │\n│    │                                                   │\n│    ├──[80ms] team_db.find_owner                       │\n│    │                                                   │\n│    └──[1970ms] response_synthesis (LLM call)          │\n```\n\n**Now you can SEE** that vector_db.search took 3100ms - that's your bottleneck!",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## What is a Span?\n\nA **span** represents a **single operation** within a trace.\n\n### Every span has:\n\n| Property | Description | Example |\n|----------|-------------|---------|\n| **Name** | What operation this is | `vector_db.search` |\n| **Start Time** | When it started | `2024-01-15T10:30:00.000Z` |\n| **End Time** | When it finished | `2024-01-15T10:30:03.100Z` |\n| **Duration** | How long it took | `3100ms` |\n| **Parent** | Which span triggered this one | `agent.query` |\n| **Attributes** | Key-value metadata | `db.system=chromadb` |\n| **Status** | OK, ERROR, or UNSET | `OK` |\n| **Events** | Timestamped logs within the span | `query executed` |\n\n### Span Hierarchy:\n\nSpans form a **tree structure**:\n- **Root span**: The top-level operation (e.g., `agent.query`)\n- **Child spans**: Operations triggered by the parent (e.g., `vector_db.search`)\n- **Nested spans**: Can go many levels deep\n\nThis hierarchy shows **causality** - which operations triggered which.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Trace/Span Hierarchy\n\n```mermaid\ngantt\n    title Trace: agent.query (5200ms total)\n    dateFormat X\n    axisFormat %L\n\n    section Root\n    agent.query           :0, 5200\n\n    section Planning\n    _plan_tools           :0, 50\n    \n    section Execution\n    vector_db.search      :crit, 100, 3200\n    team_db.find_owner    :3250, 3330\n    \n    section Synthesis\n    _generate_response    :3350, 5200\n```\n\n**What this visualization shows:**\n1. Total request took 5200ms\n2. `vector_db.search` took 3100ms (60% of total time!)\n3. We can immediately identify the bottleneck\n\n**Attributes on vector_db.search span:**\n- `db.system = \"chromadb\"`\n- `vector.query = \"How do I authenticate...\"`\n- `vector.latency_ms = 3100` - This tells us WHY it was slow",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Span Attributes: The Secret Sauce\n\nAttributes are **key-value pairs** attached to spans that provide context.\n\n### Standard Attributes (OpenTelemetry Semantic Conventions):\n\n| Attribute | Description | Example |\n|-----------|-------------|---------|\n| `service.name` | Which service | `devhub-john-smith` |\n| `db.system` | Database type | `chromadb`, `postgresql` |\n| `db.operation` | Operation type | `query`, `insert` |\n| `http.method` | HTTP method | `GET`, `POST` |\n| `http.status_code` | Response code | `200`, `500` |\n\n### Custom Attributes (DevHub-specific):\n\n| Attribute | Description | Why It Matters |\n|-----------|-------------|----------------|\n| `vector.query` | Search query text | See what was searched |\n| `vector.latency_ms` | Query latency | Identify slow queries |\n| `vector.results_count` | Number of results | Check retrieval quality |\n| `vector.top_distance` | Best similarity score | Detect poor matches |\n| `owner.is_active` | Owner status | Catch stale data |\n| `llm.model` | Model used | Track model performance |\n| `llm.tokens` | Tokens used | Monitor costs |\n\n**Attributes are what make debugging possible.** They answer not just \"what happened\" but \"WHY did it happen.\"",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Context Propagation: Connecting the Dots\n\nHow does a trace stay connected across different services and function calls?\n\n### The W3C Trace Context Standard\n\nWhen a span starts, it generates:\n- **Trace ID**: Unique ID for the entire trace (stays the same)\n- **Span ID**: Unique ID for this specific span\n- **Parent Span ID**: The span that created this one\n\n```\ntraceparent: 00-abc123def456-span789-01\n             │    │            │      │\n             │    │            │      └─ Flags\n             │    │            └─ Span ID (this span)\n             │    └─ Trace ID (whole trace)\n             └─ Version\n```\n\n### How it works in OpenTelemetry:\n\n```python\n# OpenTelemetry automatically propagates context\nwith tracer.start_as_current_span(\"parent_operation\"):\n    # Any spans created here automatically become children\n    with tracer.start_as_current_span(\"child_operation\"):\n        # This span's parent is automatically set\n        pass\n```\n\nYou don't need to manually pass trace IDs - OpenTelemetry handles it!",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## OpenTelemetry: The Industry Standard\n\n**OpenTelemetry (OTel)** is the industry-standard framework for observability.\n\n### Why OpenTelemetry?\n\n| Feature | Benefit |\n|---------|---------|\n| **Vendor-neutral** | Works with Jaeger, Datadog, New Relic, etc. |\n| **Single API** | Learn once, use everywhere |\n| **Auto-instrumentation** | Many libraries instrumented automatically |\n| **Wide adoption** | Used by Google, Microsoft, AWS, etc. |\n\n### Key Components:\n\n1. **Tracer Provider**: Creates and manages tracers\n2. **Tracer**: Creates spans\n3. **Span Processor**: Processes spans before export\n4. **Exporter**: Sends spans to backend (Jaeger, etc.)\n\n### Basic Pattern:\n\n```python\nfrom opentelemetry import trace\n\n# Get a tracer\ntracer = trace.get_tracer(\"my-service\")\n\n# Create spans\nwith tracer.start_as_current_span(\"operation_name\") as span:\n    span.set_attribute(\"key\", \"value\")\n    # Your code here\n```\n\n**Next:** Let's see this in action with a simple demo.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# DEMO: Create a Simple Trace\n# =============================================================================\n# This shows the basic pattern for creating traces with OpenTelemetry.\n\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter\nfrom opentelemetry.sdk.resources import Resource\nimport time\n\n# -----------------------------------------------------------------------------\n# Step 1: Configure the tracer provider\n# -----------------------------------------------------------------------------\nresource = Resource.create({\n    \"service.name\": f\"demo-tracing-{STUDENT_NAME}\",\n    \"service.version\": \"1.0.0\",\n})\n\nprovider = TracerProvider(resource=resource)\n\n# -----------------------------------------------------------------------------\n# Step 2: Configure the exporter (sends traces to Jaeger)\n# -----------------------------------------------------------------------------\nexporter = OTLPSpanExporter(\n    endpoint=JAEGER_ENDPOINT,\n    insecure=True  # Use insecure for workshop (no TLS)\n)\n\nprovider.add_span_processor(BatchSpanProcessor(exporter))\n\n# -----------------------------------------------------------------------------\n# Step 3: Set as global tracer provider\n# -----------------------------------------------------------------------------\ntrace.set_tracer_provider(provider)\n\n# -----------------------------------------------------------------------------\n# Step 4: Get a tracer\n# -----------------------------------------------------------------------------\ntracer = trace.get_tracer(\"demo-tracer\")\n\n# -----------------------------------------------------------------------------\n# Step 5: Create spans!\n# -----------------------------------------------------------------------------\nprint(\"Creating a trace with nested spans...\")\n\nwith tracer.start_as_current_span(\"parent_operation\") as parent:\n    parent.set_attribute(\"demo.type\", \"workshop\")\n    parent.set_attribute(\"student.name\", STUDENT_NAME)\n\n    # Simulate some work\n    time.sleep(0.1)\n\n    # Child span 1\n    with tracer.start_as_current_span(\"child_operation_1\") as child1:\n        child1.set_attribute(\"operation.type\", \"database_query\")\n        time.sleep(0.2)  # Simulate DB query\n\n    # Child span 2\n    with tracer.start_as_current_span(\"child_operation_2\") as child2:\n        child2.set_attribute(\"operation.type\", \"api_call\")\n        time.sleep(0.15)  # Simulate API call\n\n# Force flush to ensure spans are sent\nprovider.force_flush()\n\nprint(\"Trace created and sent to Jaeger!\")\nprint(f\"\\nView it at: {JAEGER_UI}\")\nprint(f\"Service name: demo-tracing-{STUDENT_NAME}\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# DEMO: How to View Your Trace in Jaeger\n# =============================================================================\n# Follow these steps to see your trace in the Jaeger UI.\n\nprint(\"=\" * 60)\nprint(\"HOW TO VIEW YOUR TRACE IN JAEGER\")\nprint(\"=\" * 60)\n\nprint(f\"\"\"\n1. Open Jaeger UI in your browser:\n   {JAEGER_UI}\n\n2. Enter credentials if prompted:\n   Username: workshop\n   Password: salesforce2025\n\n3. In the \"Service\" dropdown, select:\n   demo-tracing-{STUDENT_NAME}\n\n4. Click \"Find Traces\"\n\n5. Click on the trace that appears\n\n6. You should see:\n   - parent_operation (root span)\n     |-- child_operation_1 (database_query)\n     |-- child_operation_2 (api_call)\n\n7. Click on each span to see its attributes\n\n\"\"\")\n\nprint(\"=\" * 60)\nprint(\"TIP: If you don't see your trace, wait 10 seconds and refresh.\")\nprint(\"    Traces are batched and may take a moment to appear.\")\nprint(\"=\" * 60)",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n## Key Insight: Traces Show WHERE, Not Just THAT\n\n**Without tracing:**\n> \"The request took 5 seconds.\"\n\n**With tracing:**\n> \"The request took 5 seconds, of which 3 seconds was the vector database query, and the query had a latency_ms attribute of 3000, which matches our configured slow query latency, indicating this was a simulated slow query scenario.\"\n\nTracing transforms debugging from:\n- **Guessing** -> **Knowing**\n- **Hours of investigation** -> **Minutes of analysis**\n- **\"It's slow somewhere\"** -> **\"vector_db.search took 3100ms\"**\n\n---\n\n**Next:** Now you'll instrument DevHub yourself in Lab 1, adding tracing to all components so you can see exactly what's happening inside.",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n# Lab 1: Instrument DevHub with OpenTelemetry\n\nTime to get your hands dirty! In this lab, you'll add tracing to DevHub so you can see exactly what's happening inside.\n\n**Duration:** ~30 minutes\n\n**What you'll do:**\n1. Initialize OpenTelemetry (Task 1)\n2. Instrument VectorDB.search() (Task 2)\n3. Instrument TeamDB.find_owner() (Task 3)\n4. Instrument StatusAPI.check_status() (Task 4)\n5. Instrument DevHubAgent.query() (Task 5)\n\n**Scaffolding level decreases** as you go:\n- Task 1: Full step-by-step guidance\n- Task 2: Medium guidance\n- Task 3: Light guidance\n- Task 4: Minimal guidance\n- Task 5: Just the goal",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## What You'll Instrument\n\nBy the end of this lab, every DevHub query will generate a trace like:\n\n```\nagent.query (root span)\n  |\n  |-- _plan_tools\n  |     |-- llm.completion\n  |\n  |-- _execute_tool\n  |     |-- vector_db.search\n  |           Attributes:\n  |           - db.system = \"chromadb\"\n  |           - vector.query = \"...\"\n  |           - vector.latency_ms = 150\n  |           - vector.results_count = 3\n  |\n  |-- _execute_tool\n  |     |-- team_db.find_owner\n  |           Attributes:\n  |           - db.system = \"sqlite\"\n  |           - owner.name = \"Sarah Chen\"\n  |           - owner.is_active = true\n  |\n  |-- _generate_response\n        |-- llm.completion\n```\n\nThis visibility will let you diagnose any performance or data issue!",
+   "metadata": {}
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Task 1: Initialize OpenTelemetry\n\n**Goal:** Set up the tracing infrastructure for DevHub.\n\n**What you need to do:**\n\n1. Create a `Resource` with service name `devhub-{STUDENT_NAME}`\n2. Create a `TracerProvider` with that resource\n3. Create an `OTLPSpanExporter` pointing to Jaeger\n4. Add a `BatchSpanProcessor` to the provider\n5. Set the provider as global\n6. Create a tracer named `devhub`\n\n**Code structure:**\n```python\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter\nfrom opentelemetry.sdk.resources import Resource\n\n# Step 1: Create resource\nresource = Resource.create({\"service.name\": \"devhub-YOUR_NAME\"})\n\n# Step 2: Create provider\nprovider = TracerProvider(resource=resource)\n\n# Step 3: Create exporter\nexporter = OTLPSpanExporter(endpoint=JAEGER_ENDPOINT, insecure=True)\n\n# Step 4: Add processor\nprovider.add_span_processor(BatchSpanProcessor(exporter))\n\n# Step 5: Set global\ntrace.set_tracer_provider(provider)\n\n# Step 6: Get tracer\ntracer = trace.get_tracer(\"devhub\")\n```\n\n**Time:** ~5 minutes",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# TASK 1: Initialize OpenTelemetry\n# =============================================================================\n# Set up the tracing infrastructure for DevHub.\n# Follow the instructions in the cell above.\n#\n# TIME: ~5 minutes\n# =============================================================================\n\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import BatchSpanProcessor\nfrom opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter\nfrom opentelemetry.sdk.resources import Resource\n\n# -----------------------------------------------------------------------------\n# PUT YOUR CODE HERE\n# -----------------------------------------------------------------------------\n\n# Step 1: Create resource with service.name = f\"devhub-{STUDENT_NAME}\"\nresource = None  # PUT YOUR CODE HERE\n\n# Step 2: Create TracerProvider with the resource\nprovider = None  # PUT YOUR CODE HERE\n\n# Step 3: Create OTLPSpanExporter pointing to JAEGER_ENDPOINT\nexporter = None  # PUT YOUR CODE HERE\n\n# Step 4: Add BatchSpanProcessor to the provider\n# PUT YOUR CODE HERE\n\n# Step 5: Set as global tracer provider\n# PUT YOUR CODE HERE\n\n# Step 6: Get a tracer named \"devhub\"\ntracer = None  # PUT YOUR CODE HERE\n\n# -----------------------------------------------------------------------------\n# END YOUR CODE\n# -----------------------------------------------------------------------------\n\n# Verification\nif tracer is not None:\n    print(\"OpenTelemetry initialized!\")\n    print(f\"   Service name: devhub-{STUDENT_NAME}\")\n    print(f\"   Exporting to: {JAEGER_ENDPOINT}\")\nelse:\n    print(\"tracer is None - check your code above\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SOLUTION: Task 1 - Initialize OpenTelemetry\n# =============================================================================\n# Expand this cell to see the solution if you get stuck.\n\n# Step 1: Create resource\nresource = Resource.create({\n    \"service.name\": f\"devhub-{STUDENT_NAME}\",\n    \"service.version\": \"1.0.0\",\n})\n\n# Step 2: Create provider\nprovider = TracerProvider(resource=resource)\n\n# Step 3: Create exporter\nexporter = OTLPSpanExporter(\n    endpoint=JAEGER_ENDPOINT,\n    insecure=True\n)\n\n# Step 4: Add processor\nprovider.add_span_processor(BatchSpanProcessor(exporter))\n\n# Step 5: Set global\ntrace.set_tracer_provider(provider)\n\n# Step 6: Get tracer\ntracer = trace.get_tracer(\"devhub\")\n\nprint(\"OpenTelemetry initialized (from solution)\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Task 2: Instrument VectorDB.search()\n\n**Goal:** Add tracing to the vector database search method.\n\n**What to capture:**\n- Span name: `vector_db.search`\n- Attributes:\n  - `db.system` = `\"chromadb\"`\n  - `vector.query` = the search query (first 100 chars)\n  - `vector.top_k` = the top_k parameter\n  - `vector.latency_ms` = the latency from the result\n  - `vector.results_count` = number of results returned\n  - `vector.top_distance` = the best (lowest) distance score\n\n**Pattern:**\n```python\ndef search(self, query: str, top_k: int = 3) -> dict:\n    with tracer.start_as_current_span(\"vector_db.search\") as span:\n        span.set_attribute(\"db.system\", \"chromadb\")\n        span.set_attribute(\"vector.query\", query[:100])\n        # ... existing code ...\n        span.set_attribute(\"vector.latency_ms\", result[\"latency_ms\"])\n        return result\n```\n\n**Time:** ~8 minutes",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# TASK 2: Instrument VectorDB.search()\n# =============================================================================\n# Add tracing to capture search queries and their performance.\n#\n# TIME: ~8 minutes\n# =============================================================================\n\nclass VectorDBInstrumented:\n    \"\"\"VectorDB with OpenTelemetry instrumentation.\"\"\"\n\n    def __init__(self):\n        self._client = chromadb.Client(Settings(anonymized_telemetry=False))\n        self._collection = self._client.get_or_create_collection(\n            name=\"devhub_docs_instrumented\",\n            metadata={\"hnsw:space\": \"cosine\"}\n        )\n        self._load_documents()\n\n    def _load_documents(self):\n        ids = [doc[\"id\"] for doc in DOCS_DATA]\n        texts = [doc[\"content\"] for doc in DOCS_DATA]\n        metadatas = [{\"title\": doc[\"title\"], \"category\": doc[\"category\"]} for doc in DOCS_DATA]\n        self._collection.upsert(ids=ids, documents=texts, metadatas=metadatas)\n\n    def search(self, query: str, top_k: int = 3) -> dict:\n        # ─────────────────────────────────────────────────────────────────────\n        # PUT YOUR CODE HERE: Wrap this method with a span\n        # ─────────────────────────────────────────────────────────────────────\n\n        # 1. Start a span named \"vector_db.search\"\n        # 2. Set attributes: db.system, vector.query, vector.top_k\n\n        # ─────────────────────────────────────────────────────────────────────\n\n        start_time = time.time()\n\n        # Intentional problems (keep these!)\n        if random.random() < Config.VECTOR_DB_FAILURE_RATE:\n            raise ConnectionError(\"VectorDB connection failed: ECONNREFUSED\")\n\n        if random.random() < Config.VECTOR_DB_SLOW_QUERY_RATE:\n            time.sleep(Config.VECTOR_DB_SLOW_QUERY_LATENCY / 1000)\n        else:\n            time.sleep(random.randint(Config.VECTOR_DB_LATENCY_MIN, Config.VECTOR_DB_LATENCY_MAX) / 1000)\n\n        results = self._collection.query(query_texts=[query], n_results=top_k)\n\n        distances = results[\"distances\"][0] if results[\"distances\"] else []\n\n        if random.random() < Config.VECTOR_DB_LOW_SIMILARITY_RATE:\n            distances = [d + 0.5 for d in distances]\n\n        result = {\n            \"documents\": results[\"documents\"][0] if results[\"documents\"] else [],\n            \"metadatas\": results[\"metadatas\"][0] if results[\"metadatas\"] else [],\n            \"distances\": distances,\n            \"latency_ms\": int((time.time() - start_time) * 1000)\n        }\n\n        # ─────────────────────────────────────────────────────────────────────\n        # PUT YOUR CODE HERE: Set attributes for latency, results_count, top_distance\n        # ─────────────────────────────────────────────────────────────────────\n\n        # 3. Set: vector.latency_ms, vector.results_count, vector.top_distance\n\n        # ─────────────────────────────────────────────────────────────────────\n\n        return result\n\n\n# Test it\ntest_vdb = VectorDBInstrumented()\ntest_result = test_vdb.search(\"authentication\")\nprint(f\"Search returned {len(test_result['documents'])} results\")\nprint(f\"   Latency: {test_result['latency_ms']}ms\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SOLUTION: Task 2 - Instrument VectorDB.search()\n# =============================================================================\n\nclass VectorDBInstrumented:\n    \"\"\"VectorDB with OpenTelemetry instrumentation.\"\"\"\n\n    def __init__(self):\n        self._client = chromadb.Client(Settings(anonymized_telemetry=False))\n        self._collection = self._client.get_or_create_collection(\n            name=\"devhub_docs_instrumented\",\n            metadata={\"hnsw:space\": \"cosine\"}\n        )\n        self._load_documents()\n\n    def _load_documents(self):\n        ids = [doc[\"id\"] for doc in DOCS_DATA]\n        texts = [doc[\"content\"] for doc in DOCS_DATA]\n        metadatas = [{\"title\": doc[\"title\"], \"category\": doc[\"category\"]} for doc in DOCS_DATA]\n        self._collection.upsert(ids=ids, documents=texts, metadatas=metadatas)\n\n    def search(self, query: str, top_k: int = 3) -> dict:\n        # Start span and set initial attributes\n        with tracer.start_as_current_span(\"vector_db.search\") as span:\n            span.set_attribute(\"db.system\", \"chromadb\")\n            span.set_attribute(\"vector.query\", query[:100])\n            span.set_attribute(\"vector.top_k\", top_k)\n\n            start_time = time.time()\n\n            # Intentional problems\n            if random.random() < Config.VECTOR_DB_FAILURE_RATE:\n                span.set_attribute(\"error\", True)\n                span.set_attribute(\"error.type\", \"ConnectionError\")\n                raise ConnectionError(\"VectorDB connection failed: ECONNREFUSED\")\n\n            if random.random() < Config.VECTOR_DB_SLOW_QUERY_RATE:\n                time.sleep(Config.VECTOR_DB_SLOW_QUERY_LATENCY / 1000)\n            else:\n                time.sleep(random.randint(Config.VECTOR_DB_LATENCY_MIN, Config.VECTOR_DB_LATENCY_MAX) / 1000)\n\n            results = self._collection.query(query_texts=[query], n_results=top_k)\n\n            distances = results[\"distances\"][0] if results[\"distances\"] else []\n\n            if random.random() < Config.VECTOR_DB_LOW_SIMILARITY_RATE:\n                distances = [d + 0.5 for d in distances]\n\n            result = {\n                \"documents\": results[\"documents\"][0] if results[\"documents\"] else [],\n                \"metadatas\": results[\"metadatas\"][0] if results[\"metadatas\"] else [],\n                \"distances\": distances,\n                \"latency_ms\": int((time.time() - start_time) * 1000)\n            }\n\n            # Set result attributes\n            span.set_attribute(\"vector.latency_ms\", result[\"latency_ms\"])\n            span.set_attribute(\"vector.results_count\", len(result[\"documents\"]))\n            if distances:\n                span.set_attribute(\"vector.top_distance\", distances[0])\n\n            return result\n\n\nprint(\"VectorDBInstrumented defined (from solution)\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Task 3: Instrument TeamDB.find_owner()\n\n**Goal:** Add tracing to capture owner lookups and detect stale data.\n\n**What to capture:**\n- Span name: `team_db.find_owner`\n- Attributes:\n  - `db.system` = `\"in_memory\"`\n  - `team_db.service` = the service name\n  - `team_db.found` = whether owner was found\n  - `owner.name` = owner's name (if found)\n  - `owner.is_active` = owner's active status (CRITICAL for detecting stale data!)\n  - `team_db.latency_ms` = latency\n\n**Less guidance this time** - follow the Task 2 pattern!\n\n**Time:** ~5 minutes",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# TASK 3: Instrument TeamDB.find_owner()\n# =============================================================================\n# Add tracing to capture owner lookups. Less guidance - follow Task 2 pattern!\n#\n# TIME: ~5 minutes\n# =============================================================================\n\nclass TeamDBInstrumented:\n    \"\"\"TeamDB with OpenTelemetry instrumentation.\"\"\"\n\n    def __init__(self):\n        self.teams = {t[\"id\"]: t for t in TEAMS_DATA[\"teams\"]}\n        self.owners = TEAMS_DATA[\"owners\"]\n\n    def find_owner(self, service_name: str) -> dict:\n        # ─────────────────────────────────────────────────────────────────────\n        # PUT YOUR CODE HERE: Add span and attributes\n        # Hint: Follow the VectorDB pattern from Task 2\n        # ─────────────────────────────────────────────────────────────────────\n\n        start_time = time.time()\n        time.sleep(random.randint(20, 100) / 1000)\n\n        matching_owners = [o for o in self.owners if service_name.lower() in [s.lower() for s in o[\"services\"]]]\n\n        if not matching_owners:\n            return {\"found\": False, \"latency_ms\": int((time.time() - start_time) * 1000)}\n\n        # INTENTIONAL PROBLEM: Stale data (10%)\n        if random.random() < Config.TEAM_DB_STALE_DATA_RATE:\n            inactive = [o for o in matching_owners if not o[\"is_active\"]]\n            if inactive:\n                owner = inactive[0]\n            else:\n                owner = matching_owners[0]\n        else:\n            active = [o for o in matching_owners if o[\"is_active\"]]\n            owner = active[0] if active else matching_owners[0]\n\n        team = self.teams.get(owner[\"team_id\"], {})\n\n        result = {\n            \"found\": True,\n            \"owner\": owner,\n            \"team\": team,\n            \"latency_ms\": int((time.time() - start_time) * 1000)\n        }\n\n        # ─────────────────────────────────────────────────────────────────────\n        # PUT YOUR CODE HERE: Set result attributes (owner.name, owner.is_active)\n        # ─────────────────────────────────────────────────────────────────────\n\n        return result\n\n\n# Test it\ntest_tdb = TeamDBInstrumented()\ntest_result = test_tdb.find_owner(\"billing\")\nprint(f\"Found: {test_result['found']}\")\nif test_result['found']:\n    print(f\"   Owner: {test_result['owner']['name']}\")\n    print(f\"   Active: {test_result['owner']['is_active']}\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SOLUTION: Task 3 - Instrument TeamDB.find_owner()\n# =============================================================================\n\nclass TeamDBInstrumented:\n    \"\"\"TeamDB with OpenTelemetry instrumentation.\"\"\"\n\n    def __init__(self):\n        self.teams = {t[\"id\"]: t for t in TEAMS_DATA[\"teams\"]}\n        self.owners = TEAMS_DATA[\"owners\"]\n\n    def find_owner(self, service_name: str) -> dict:\n        with tracer.start_as_current_span(\"team_db.find_owner\") as span:\n            span.set_attribute(\"db.system\", \"in_memory\")\n            span.set_attribute(\"team_db.service\", service_name)\n\n            start_time = time.time()\n            time.sleep(random.randint(20, 100) / 1000)\n\n            matching_owners = [o for o in self.owners if service_name.lower() in [s.lower() for s in o[\"services\"]]]\n\n            if not matching_owners:\n                span.set_attribute(\"team_db.found\", False)\n                return {\"found\": False, \"latency_ms\": int((time.time() - start_time) * 1000)}\n\n            # INTENTIONAL PROBLEM: Stale data (10%)\n            if random.random() < Config.TEAM_DB_STALE_DATA_RATE:\n                inactive = [o for o in matching_owners if not o[\"is_active\"]]\n                if inactive:\n                    owner = inactive[0]\n                else:\n                    owner = matching_owners[0]\n            else:\n                active = [o for o in matching_owners if o[\"is_active\"]]\n                owner = active[0] if active else matching_owners[0]\n\n            team = self.teams.get(owner[\"team_id\"], {})\n\n            result = {\n                \"found\": True,\n                \"owner\": owner,\n                \"team\": team,\n                \"latency_ms\": int((time.time() - start_time) * 1000)\n            }\n\n            # Set result attributes\n            span.set_attribute(\"team_db.found\", True)\n            span.set_attribute(\"owner.name\", owner[\"name\"])\n            span.set_attribute(\"owner.is_active\", owner[\"is_active\"])\n            span.set_attribute(\"team_db.latency_ms\", result[\"latency_ms\"])\n\n            return result\n\n\nprint(\"TeamDBInstrumented defined (from solution)\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Task 4: Instrument StatusAPI.check_status()\n\n**Goal:** Add tracing to capture status checks.\n\n**Minimal guidance** - you know the pattern now!\n\nSpan name: `status_api.check_status`\n\nCapture: service name, found status, service status (healthy/degraded), latency\n\n**Time:** ~5 minutes",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# TASK 4: Instrument StatusAPI.check_status()\n# =============================================================================\n# Minimal guidance - you know the pattern!\n#\n# TIME: ~5 minutes\n# =============================================================================\n\nclass StatusAPIInstrumented:\n    \"\"\"StatusAPI with OpenTelemetry instrumentation.\"\"\"\n\n    def __init__(self):\n        self.services = {s[\"name\"]: s for s in STATUS_DATA[\"services\"]}\n\n    def check_status(self, service_name: str) -> dict:\n        # ─────────────────────────────────────────────────────────────────────\n        # PUT YOUR CODE HERE: Add tracing\n        # ─────────────────────────────────────────────────────────────────────\n\n        start_time = time.time()\n\n        # INTENTIONAL PROBLEM: Timeout (2%)\n        if random.random() < Config.STATUS_API_TIMEOUT_RATE:\n            time.sleep(5)\n            raise TimeoutError(f\"StatusAPI timeout checking {service_name}\")\n\n        time.sleep(random.randint(30, 150) / 1000)\n\n        service = self.services.get(service_name.lower())\n\n        if not service:\n            return {\"found\": False, \"latency_ms\": int((time.time() - start_time) * 1000)}\n\n        return {\n            \"found\": True,\n            \"service\": service,\n            \"latency_ms\": int((time.time() - start_time) * 1000)\n        }\n\n\n# Test it\ntest_sapi = StatusAPIInstrumented()\ntest_result = test_sapi.check_status(\"staging\")\nprint(f\"Found: {test_result['found']}\")\nif test_result['found']:\n    print(f\"   Status: {test_result['service']['status']}\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SOLUTION: Task 4 - Instrument StatusAPI.check_status()\n# =============================================================================\n\nclass StatusAPIInstrumented:\n    \"\"\"StatusAPI with OpenTelemetry instrumentation.\"\"\"\n\n    def __init__(self):\n        self.services = {s[\"name\"]: s for s in STATUS_DATA[\"services\"]}\n\n    def check_status(self, service_name: str) -> dict:\n        with tracer.start_as_current_span(\"status_api.check_status\") as span:\n            span.set_attribute(\"status_api.service\", service_name)\n\n            start_time = time.time()\n\n            # INTENTIONAL PROBLEM: Timeout (2%)\n            if random.random() < Config.STATUS_API_TIMEOUT_RATE:\n                span.set_attribute(\"error\", True)\n                span.set_attribute(\"error.type\", \"TimeoutError\")\n                time.sleep(5)\n                raise TimeoutError(f\"StatusAPI timeout checking {service_name}\")\n\n            time.sleep(random.randint(30, 150) / 1000)\n\n            service = self.services.get(service_name.lower())\n\n            if not service:\n                span.set_attribute(\"status_api.found\", False)\n                return {\"found\": False, \"latency_ms\": int((time.time() - start_time) * 1000)}\n\n            result = {\n                \"found\": True,\n                \"service\": service,\n                \"latency_ms\": int((time.time() - start_time) * 1000)\n            }\n\n            span.set_attribute(\"status_api.found\", True)\n            span.set_attribute(\"status_api.status\", service[\"status\"])\n            span.set_attribute(\"status_api.latency_ms\", result[\"latency_ms\"])\n\n            return result\n\n\nprint(\"StatusAPIInstrumented defined (from solution)\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "## Task 5: Instrument DevHubAgent.query()\n\n**Goal:** Create the parent span that wraps all tool calls.\n\nThe agent's `query()` method should create a root span called `agent.query`. All the tool spans you created in Tasks 2-4 will automatically become children of this span because of OpenTelemetry's context propagation.\n\n**What to instrument:**\n- `agent.query` - root span\n- Attributes: `agent.query` (the user's question), `agent.tools_planned` (list of tools)\n\n**Time:** ~5 minutes",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# TASK 5: Instrument DevHubAgent.query()\n# =============================================================================\n# Create the parent span that wraps all tool calls.\n#\n# TIME: ~5 minutes\n# =============================================================================\n\nclass DevHubAgentInstrumented:\n    \"\"\"DevHub agent with OpenTelemetry instrumentation.\"\"\"\n\n    TOOL_PLANNING_PROMPT = DevHubAgent.TOOL_PLANNING_PROMPT\n    RESPONSE_PROMPT = DevHubAgent.RESPONSE_PROMPT\n\n    def __init__(self):\n        # Use instrumented services\n        self.vector_db = VectorDBInstrumented()\n        self.team_db = TeamDBInstrumented()\n        self.status_api = StatusAPIInstrumented()\n        self.client = OpenAI()\n\n    def _plan_tools(self, query: str) -> list:\n        response = self.client.chat.completions.create(\n            model=Config.LLM_MODEL,\n            messages=[\n                {\"role\": \"system\", \"content\": \"You are a tool planning assistant. Respond only with valid JSON.\"},\n                {\"role\": \"user\", \"content\": self.TOOL_PLANNING_PROMPT.format(query=query)}\n            ],\n            temperature=0.1,\n            max_tokens=256\n        )\n        content = response.choices[0].message.content.strip()\n        if content.startswith(\"```\"):\n            content = content.split(\"```\")[1]\n            if content.startswith(\"json\"):\n                content = content[4:]\n        try:\n            return json.loads(content.strip())\n        except:\n            return []\n\n    def _execute_tool(self, tool_name: str, args: dict) -> dict:\n        result = {\"tool\": tool_name, \"success\": False, \"data\": None, \"error\": None}\n        try:\n            if tool_name == \"search_docs\":\n                result[\"data\"] = self.vector_db.search(args.get(\"query\", \"\"))\n                result[\"success\"] = True\n            elif tool_name == \"find_owner\":\n                result[\"data\"] = self.team_db.find_owner(args.get(\"service\", \"\"))\n                result[\"success\"] = True\n            elif tool_name == \"check_status\":\n                result[\"data\"] = self.status_api.check_status(args.get(\"service\", \"\"))\n                result[\"success\"] = True\n        except Exception as e:\n            result[\"error\"] = str(e)\n        return result\n\n    def _generate_response(self, query: str, tool_results: list) -> str:\n        response = self.client.chat.completions.create(\n            model=Config.LLM_MODEL,\n            messages=[\n                {\"role\": \"system\", \"content\": \"You are DevHub, a helpful developer assistant.\"},\n                {\"role\": \"user\", \"content\": self.RESPONSE_PROMPT.format(query=query, results=json.dumps(tool_results, indent=2))}\n            ],\n            temperature=0.3,\n            max_tokens=1024\n        )\n        return response.choices[0].message.content\n\n    def query(self, user_query: str) -> dict:\n        # ─────────────────────────────────────────────────────────────────────\n        # PUT YOUR CODE HERE: Wrap everything in an \"agent.query\" span\n        # ─────────────────────────────────────────────────────────────────────\n\n        planned_tools = self._plan_tools(user_query)\n        tool_results = [self._execute_tool(t[\"tool\"], t.get(\"args\", {})) for t in planned_tools]\n        response = self._generate_response(user_query, tool_results)\n        \n        return {\n            \"response\": response,\n            \"tools_called\": [t[\"tool\"] for t in planned_tools],\n            \"tool_results\": tool_results\n        }\n\n\nprint(\"DevHubAgentInstrumented defined\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# SOLUTION: Task 5 - Instrument DevHubAgent.query()\n# =============================================================================\n\nclass DevHubAgentInstrumented:\n    \"\"\"DevHub agent with OpenTelemetry instrumentation.\"\"\"\n\n    TOOL_PLANNING_PROMPT = DevHubAgent.TOOL_PLANNING_PROMPT\n    RESPONSE_PROMPT = DevHubAgent.RESPONSE_PROMPT\n\n    def __init__(self):\n        self.vector_db = VectorDBInstrumented()\n        self.team_db = TeamDBInstrumented()\n        self.status_api = StatusAPIInstrumented()\n        self.client = OpenAI()\n\n    def _plan_tools(self, query: str) -> list:\n        with tracer.start_as_current_span(\"_plan_tools\") as span:\n            response = self.client.chat.completions.create(\n                model=Config.LLM_MODEL,\n                messages=[\n                    {\"role\": \"system\", \"content\": \"You are a tool planning assistant. Respond only with valid JSON.\"},\n                    {\"role\": \"user\", \"content\": self.TOOL_PLANNING_PROMPT.format(query=query)}\n                ],\n                temperature=0.1,\n                max_tokens=256\n            )\n            content = response.choices[0].message.content.strip()\n            if content.startswith(\"```\"):\n                content = content.split(\"```\")[1]\n                if content.startswith(\"json\"):\n                    content = content[4:]\n            try:\n                return json.loads(content.strip())\n            except:\n                return []\n\n    def _execute_tool(self, tool_name: str, args: dict) -> dict:\n        with tracer.start_as_current_span(f\"_execute_tool.{tool_name}\") as span:\n            span.set_attribute(\"tool.name\", tool_name)\n            result = {\"tool\": tool_name, \"success\": False, \"data\": None, \"error\": None}\n            try:\n                if tool_name == \"search_docs\":\n                    result[\"data\"] = self.vector_db.search(args.get(\"query\", \"\"))\n                    result[\"success\"] = True\n                elif tool_name == \"find_owner\":\n                    result[\"data\"] = self.team_db.find_owner(args.get(\"service\", \"\"))\n                    result[\"success\"] = True\n                elif tool_name == \"check_status\":\n                    result[\"data\"] = self.status_api.check_status(args.get(\"service\", \"\"))\n                    result[\"success\"] = True\n            except Exception as e:\n                result[\"error\"] = str(e)\n                span.set_attribute(\"error\", True)\n            return result\n\n    def _generate_response(self, query: str, tool_results: list) -> str:\n        with tracer.start_as_current_span(\"_generate_response\") as span:\n            response = self.client.chat.completions.create(\n                model=Config.LLM_MODEL,\n                messages=[\n                    {\"role\": \"system\", \"content\": \"You are DevHub, a helpful developer assistant.\"},\n                    {\"role\": \"user\", \"content\": self.RESPONSE_PROMPT.format(query=query, results=json.dumps(tool_results, indent=2))}\n                ],\n                temperature=0.3,\n                max_tokens=1024\n            )\n            return response.choices[0].message.content\n\n    def query(self, user_query: str) -> dict:\n        with tracer.start_as_current_span(\"agent.query\") as span:\n            span.set_attribute(\"agent.query\", user_query[:200])\n\n            planned_tools = self._plan_tools(user_query)\n            span.set_attribute(\"agent.tools_planned\", str([t[\"tool\"] for t in planned_tools]))\n\n            tool_results = [self._execute_tool(t[\"tool\"], t.get(\"args\", {})) for t in planned_tools]\n            response = self._generate_response(user_query, tool_results)\n\n            return {\n                \"response\": response,\n                \"tools_called\": [t[\"tool\"] for t in planned_tools],\n                \"tool_results\": tool_results\n            }\n\n\nprint(\"DevHubAgentInstrumented defined (from solution)\")",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": "# =============================================================================\n# RUN INSTRUMENTED DEVHUB\n# =============================================================================\n# Now let's run some queries and generate traces!\n\nprint(\"Creating instrumented DevHub agent...\")\n\n# Create agent with instrumented services\ninstrumented_agent = DevHubAgentInstrumented()\n\nprint(\"Instrumented agent created!\")\nprint(\"\\nRunning test queries to generate traces...\\n\")\n\n# Run several queries\ntest_queries = [\n    \"How do I authenticate with the Payments API?\",\n    \"Who owns vector search?\",\n    \"Is staging working?\",\n]\n\nfor q in test_queries:\n    print(f\"Query: {q}\")\n    try:\n        result = instrumented_agent.query(q)\n        print(f\"  Tools: {result['tools_called']}\")\n        print(f\"  Answer: {result['response'][:100]}...\\n\")\n    except Exception as e:\n        print(f\"  Error: {e}\\n\")\n\n# Force flush to send all traces\nprovider.force_flush()\n\nprint(\"=\" * 60)\nprint(\"Traces sent to Jaeger!\")\nprint(f\"   View at: {JAEGER_UI}\")\nprint(f\"   Service: devhub-{STUDENT_NAME}\")\nprint(\"=\" * 60)",
+   "metadata": {},
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "source": "---\n\n## Lab 1 Verification Checklist\n\nGo to Jaeger and verify your instrumentation:\n\n### 1. Find Your Traces\n- [ ] Open Jaeger UI\n- [ ] Select service: `devhub-{STUDENT_NAME}`\n- [ ] Click \"Find Traces\"\n- [ ] See at least 3 traces from your test queries\n\n### 2. Verify Span Structure\n- [ ] Root span: `agent.query`\n- [ ] Child spans for tool planning and execution\n- [ ] Nested spans for `vector_db.search`, `team_db.find_owner`, etc.\n\n### 3. Verify Attributes\n- [ ] `vector_db.search` has: `db.system`, `vector.query`, `vector.latency_ms`\n- [ ] `team_db.find_owner` has: `db.system`, `owner.name`, `owner.is_active`\n- [ ] `status_api.check_status` has: `service.name`, `service.status`\n\n### 4. Look for Issues\n- [ ] Find a slow query (latency_ms > 2000)\n- [ ] Find an inactive owner (is_active = false)\n- [ ] Find a low similarity result (distance > 0.5)\n\n**If you see all these, you've successfully instrumented DevHub!**",
+   "metadata": {}
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# =============================================================================\n",
+    "# HOW TO VERIFY YOUR TRACES\n",
+    "# =============================================================================\n",
+    "\n",
+    "print(f\"\"\"\n",
+    "VERIFICATION STEPS:\n",
+    "\n",
+    "1. Open Jaeger:\n",
+    "   {JAEGER_UI}\n",
+    "\n",
+    "   Credentials: workshop / salesforce2025\n",
+    "\n",
+    "2. Select Service:\n",
+    "   devhub-{STUDENT_NAME}\n",
+    "\n",
+    "3. Click \"Find Traces\"\n",
+    "\n",
+    "4. Click on any trace to see the span waterfall\n",
+    "\n",
+    "5. Click on individual spans to see attributes\n",
+    "\n",
+    "WHAT TO LOOK FOR:\n",
+    "\n",
+    "✓ Root span \"agent.query\" containing all other spans\n",
+    "✓ Child spans for each tool (_execute_tool)\n",
+    "✓ Nested spans for actual tool implementations\n",
+    "✓ Attributes on each span (db.system, latency_ms, etc.)\n",
+    "\n",
+    "IF SOMETHING IS MISSING:\n",
+    "\n",
+    "- Check that your code has tracer.start_as_current_span()\n",
+    "- Check that you're setting attributes with span.set_attribute()\n",
+    "- Make sure provider.force_flush() was called\n",
+    "- Wait 10-15 seconds and refresh Jaeger\n",
+    "\n",
+    "\"\"\")\n"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.11.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}

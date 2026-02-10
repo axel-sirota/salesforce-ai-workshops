@@ -41,6 +41,8 @@ def main():
         ("Phase 4: VectorDB", "verify_phase4_vectordb.py"),
         ("Phase 5: TeamDB", "verify_phase5_teamdb.py"),
         ("Phase 6: StatusAPI", "verify_phase6_statusapi.py"),
+        ("Phase 7: DevHubAgent", "verify_phase7_agent.py"),
+        ("Phase 8: CLI & V0", "verify_phase8_cli.py"),
     ]
 
     results = []

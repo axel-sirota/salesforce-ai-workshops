@@ -1,0 +1,35 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ffebee', 'primaryTextColor': '#b71c1c', 'primaryBorderColor': '#c62828', 'lineColor': '#c62828', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
+flowchart TB
+    QUERY["Same Query:<br/>'How do I authenticate<br/>with the Payments API?'"]
+
+    subgraph V1["Prompt V1 (Original)"]
+        direction TB
+        V1R["Detailed response<br/>with steps and<br/>code examples<br/>Score: 0.85"]
+    end
+
+    subgraph V2["Prompt V2 (Concise)"]
+        direction TB
+        V2R["Brief response<br/>missing key details<br/>no error handling<br/>Score: 0.45"]
+    end
+
+    subgraph V3["Prompt V3 (????)"]
+        direction TB
+        V3R["Better for docs<br/>but broke status<br/>queries completely<br/>Score: varies"]
+    end
+
+    QUERY --> V1
+    QUERY --> V2
+    QUERY --> V3
+
+    PROBLEM["Without automated testing,<br/>you only discover regressions<br/>when users complain"]
+
+    V2 --> PROBLEM
+    V3 --> PROBLEM
+
+    style V1 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style V2 fill:#ffebee,stroke:#c62828,stroke-width:2px
+    style V3 fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style V1R fill:#c8e6c9,stroke:#2e7d32
+    style V2R fill:#ffcdd2,stroke:#c62828,stroke-width:3px
+    style V3R fill:#ffe0b2,stroke:#e65100
+    style PROBLEM fill:#ffcdd2,stroke:#c62828,stroke-width:3px

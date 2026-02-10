@@ -11,9 +11,7 @@ Note: Service implementations will be added in Phases 4-6.
 """
 
 from .vector_db import VectorDB
+from .team_db import TeamDB
+from .status_api import StatusAPI
 
-# Future imports:
-# from .team_db import TeamDB
-# from .status_api import StatusAPI
-
-__all__ = ["VectorDB"]
+__all__ = ["VectorDB", "TeamDB", "StatusAPI"]
