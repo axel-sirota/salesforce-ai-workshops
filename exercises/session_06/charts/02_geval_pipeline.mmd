@@ -10,7 +10,7 @@ flowchart TB
         C1["'Determine whether the<br/>response contains factually<br/>accurate information relevant<br/>to the developer query'"]
     end
 
-    subgraph Judge["Gemini Flash (Judge)"]
+    subgraph Judge["GPT-4o (Judge)"]
         direction TB
         COT["Auto-generated<br/>Chain-of-Thought<br/>evaluation steps"]
         SCORE["Scoring:<br/>Token probabilities<br/>P(1), P(2)...P(5)"]

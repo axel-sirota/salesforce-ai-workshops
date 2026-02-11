@@ -2,12 +2,12 @@
 flowchart TB
     subgraph TDD["Prompt TDD Cycle"]
         direction TB
-        WRITE["1. Write Test<br/>Define what 'good'<br/>looks like"]
-        RED["2. Run Test (RED)<br/>Current prompt<br/>fails the test"]
-        IMPROVE["3. Improve Prompt<br/>Modify wording,<br/>add instructions"]
-        GREEN["4. Run Test (GREEN)<br/>New prompt<br/>passes the test"]
-        REGRESS["5. Run ALL Tests<br/>Check nothing<br/>broke"]
-        VERSION["6. Version & Deploy<br/>Register in<br/>PromptRegistry"]
+        WRITE["Step 1: Write Test<br/>Define what 'good'<br/>looks like"]
+        RED["Step 2: Run Test — RED<br/>Current prompt<br/>fails the test"]
+        IMPROVE["Step 3: Improve Prompt<br/>Modify wording,<br/>add instructions"]
+        GREEN["Step 4: Run Test — GREEN<br/>New prompt<br/>passes the test"]
+        REGRESS["Step 5: Run ALL Tests<br/>Check nothing<br/>broke"]
+        VERSION["Step 6: Version and Deploy<br/>Register in<br/>PromptRegistry"]
 
         WRITE --> RED
         RED --> IMPROVE
@@ -20,7 +20,7 @@ flowchart TB
     subgraph Tools["Our Stack"]
         direction TB
         T1["G-Eval Metrics<br/>(DeepEval)"]
-        T2["Judge: Gemini Flash<br/>(cross-model eval)"]
+        T2["Judge: GPT-4o<br/>(stronger judges weaker)"]
         T3["PromptRegistry<br/>(version control)"]
         T4["DevHub Agent<br/>(real LLM calls)"]
     end

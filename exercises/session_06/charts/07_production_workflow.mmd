@@ -1,20 +1,20 @@
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e1f5fe', 'primaryTextColor': '#01579b', 'primaryBorderColor': '#0288d1', 'lineColor': '#0288d1', 'secondaryColor': '#fff3e0', 'tertiaryColor': '#f3e5f5'}}}%%
 flowchart LR
-    subgraph Dev["1. Develop"]
+    subgraph Dev["Step 1: Develop"]
         direction TB
         D1["Write new prompt"]
         D2["Run TDD cycle<br/>(red/green/refactor)"]
         D1 --> D2
     end
 
-    subgraph Test["2. Test"]
+    subgraph Test["Step 2: Test"]
         direction TB
         T1["Full regression<br/>suite"]
         T2{"All metrics<br/>above<br/>threshold?"}
         T1 --> T2
     end
 
-    subgraph Canary["3. Canary"]
+    subgraph Canary["Step 3: Canary"]
         direction TB
         C1["Deploy to 10%<br/>of traffic"]
         C2["Monitor metrics<br/>in Langfuse"]
@@ -22,14 +22,14 @@ flowchart LR
         C1 --> C2 --> C3
     end
 
-    subgraph Promote["4. Promote"]
+    subgraph Promote["Step 4: Promote"]
         direction TB
         P1["Set alias<br/>stable → new version"]
         P2["100% traffic"]
         P1 --> P2
     end
 
-    subgraph Monitor["5. Monitor"]
+    subgraph Monitor["Step 5: Monitor"]
         direction TB
         M1["Track scores<br/>over time"]
         M2["Alert if score<br/>drops below<br/>threshold"]
