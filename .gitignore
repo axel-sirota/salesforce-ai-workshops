@@ -231,6 +231,9 @@ plans/
 context/
 .claude/settings.local.json
 
+# Teacher guidelines (not for students)
+**/TEACHER_GUIDELINES.md
+
 # DevHub venv
 devhub/.venv/
 devhub/.python-version

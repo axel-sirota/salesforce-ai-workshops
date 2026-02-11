@@ -288,6 +288,34 @@ with open('notebook.ipynb', 'w') as f:
 
 ---
 
+## Issue 8: SVG References Must Use Absolute GitHub URLs
+
+**Symptom:** Broken images when notebook is hosted (Google Colab, nbviewer) — relative paths like `charts/XX.svg` don't resolve.
+
+**Root Cause:** Notebooks are served from hosted platforms that don't have access to the local file tree. Relative paths like `![Diagram](charts/00_example.svg)` only work when running the notebook locally from the same directory.
+
+**Broken (in hosted notebooks):**
+
+```markdown
+![Security Architecture](charts/00_security_architecture.svg)
+```
+
+**Fixed:**
+
+```markdown
+![Security Architecture](https://raw.githubusercontent.com/axel-sirota/salesforce-ai-workshops/main/exercises/session_05/charts/00_security_architecture.svg)
+```
+
+**Pattern:**
+
+```text
+https://raw.githubusercontent.com/axel-sirota/salesforce-ai-workshops/main/exercises/session_XX/charts/YY_name.svg
+```
+
+**Rule:** All SVG image references in notebooks MUST use absolute GitHub raw URLs, not relative paths. This applies to both exercise and solution notebooks. After pushing SVGs, wait ~1-2 min for raw.githubusercontent.com cache to update.
+
+---
+
 ## Summary Checklist for Future Sessions
 
 - [ ] Escape JSON examples in prompts with double braces `{{}}`
@@ -298,3 +326,4 @@ with open('notebook.ipynb', 'w') as f:
 - [ ] When editing notebooks programmatically, verify correct cell targeted
 - [ ] Test full notebook in fresh Colab runtime before release
 - [ ] Handle notebook source as string OR list
+- [ ] Use absolute GitHub raw URLs for all SVG references (not relative `charts/` paths)
